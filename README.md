@@ -96,12 +96,6 @@ Please ensure your code follows the project's style and includes appropriate doc
 
 ---
 
-## License 📄
-
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
-
----
-
 ## Credits 👏
 
 - **Developer**: CygRyu
