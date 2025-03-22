@@ -1,0 +1,2952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ant Aquarium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D5CDE',
+                        secondary: '#F59E0B',
+                        dark: {
+                            bg: '#181818',
+                            text: '#E5E7EB',
+                            panel: '#262626'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes antMovement {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(10px); }
+            50% { transform: translateX(0); }
+            75% { transform: translateX(-10px); }
+            100% { transform: translateX(0); }
+        }
+        .ant-icon {
+            font-family: monospace;
+            display: inline-block;
+            animation: antMovement 3s infinite;
+            animation-delay: var(--delay, 0s);
+        }
+        .ant-worker { color: #8B4513; }
+        .ant-forager { color: #2E8B57; }
+        .ant-soldier { color: #8B0000; }
+        .ant-queen { color: #9932CC; }
+        .ant-nurse { color: #FF69B4; }
+        .ant-excavator { color: #A52A2A; }
+        
+        .chamber {
+            border: 2px solid #8B4513;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+        .chamber:hover {
+            box-shadow: 0 0 5px rgba(139, 69, 19, 0.6);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Tooltip styles */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+        
+        .tooltip .tooltip-content {
+            visibility: hidden;
+            width: 240px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -120px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            line-height: 1.4;
+            pointer-events: none;
+        }
+        
+        .tooltip .tooltip-content::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+        }
+        
+        .tooltip:hover .tooltip-content {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* Notification styles */
+        #notification-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 300px;
+        }
+        
+        .notification {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transform: translateX(100%);
+            animation: slide-in 0.3s forwards, fade-out 0.5s forwards 3.5s;
+            display: flex;
+            align-items: center;
+        }
+        
+        @keyframes slide-in {
+            to { transform: translateX(0); }
+        }
+        
+        @keyframes fade-out {
+            to { opacity: 0; }
+        }
+        
+        .notification-success {
+            background-color: #10B981;
+            color: white;
+        }
+        
+        .notification-info {
+            background-color: #3B82F6;
+            color: white;
+        }
+        
+        .notification-warning {
+            background-color: #F59E0B;
+            color: white;
+        }
+        
+        .notification-error {
+            background-color: #EF4444;
+            color: white;
+        }
+        
+        .notification-icon {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+        
+        /* Autosave indicator */
+        .autosave-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background-color: rgba(0,0,0,0.4);
+            color: white;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        
+        .autosave-indicator.active {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-white dark:bg-dark-bg text-gray-800 dark:text-dark-text transition-colors duration-200 min-h-screen">
+    <div class="container mx-auto px-4 py-6 max-w-4xl">
+        <header class="mb-4 text-center relative">
+            <h1 class="text-3xl font-bold text-primary mb-2">Ant Aquarium</h1>
+            <p class="text-gray-600 dark:text-gray-400">Manage your virtual ant colony!</p>
+            <!-- Day Counter -->
+            <div class="absolute top-0 right-0 bg-primary text-white px-3 py-1 rounded-lg shadow">
+                <span id="day-counter" class="font-bold">Day 1</span>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="mb-4 border-b border-gray-200 dark:border-gray-700">
+            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center">
+                <li class="mr-2">
+                    <a href="#" data-tab="colony" class="tab-link inline-block p-4 rounded-t-lg border-b-2 border-primary active">Colony</a>
+                </li>
+                <li class="mr-2">
+                    <a href="#" data-tab="territory" class="tab-link inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:border-gray-300">Territory</a>
+                </li>
+                <li class="mr-2">
+                    <a href="#" data-tab="statistics" class="tab-link inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:border-gray-300">Statistics</a>
+                </li>
+                <li class="mr-2">
+                    <a href="#" data-tab="prestige" class="tab-link inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:border-gray-300">Prestige</a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Colony Tab -->
+        <div id="colony-tab" class="tab-content active">
+            <!-- Stats Panel -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="bg-gray-100 dark:bg-dark-panel rounded-lg p-3 shadow">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Population</span>
+                        <span id="population-count" class="text-lg font-bold">5</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="queen-count">Queen: 1</span> | 
+                        <span id="worker-count">Workers: 4</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="specialized-count">Specialized: 0</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="lifecycle-info">Avg Age: 0d</span>
+                    </div>
+                </div>
+                <div class="bg-gray-100 dark:bg-dark-panel rounded-lg p-3 shadow">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Food</span>
+                        <span id="food-level" class="text-lg font-bold">50</span>
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                        <div id="food-bar" class="bg-green-500 h-2 rounded-full" style="width: 50%"></div>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="food-rate">+0 per min</span>
+                    </div>
+                    <div class="flex items-center mt-1">
+                        <label class="inline-flex items-center text-xs text-gray-600 dark:text-gray-400">
+                            <input type="checkbox" id="auto-feed-toggle" class="form-checkbox h-3 w-3 text-primary rounded">
+                            <span class="ml-1">Auto-feed (10 🪙)</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="bg-gray-100 dark:bg-dark-panel rounded-lg p-3 shadow">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Cleanliness</span>
+                        <span id="clean-level" class="text-lg font-bold">80</span>
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                        <div id="clean-bar" class="bg-blue-500 h-2 rounded-full" style="width: 80%"></div>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="larvae-info">Eggs: 0 | Larvae: 0</span>
+                    </div>
+                </div>
+                <div class="bg-gray-100 dark:bg-dark-panel rounded-lg p-3 shadow">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Coins</span>
+                        <span id="coin-count" class="text-lg font-bold">100</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="coin-rate">+2 every 30s</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="nest-level">Nest Level: 1</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span id="prestige-info">Prestige: 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aquarium Display -->
+            <div class="bg-gray-100 dark:bg-dark-panel rounded-lg p-4 mb-4 min-h-[280px] relative shadow">
+                <div id="aquarium-display" class="h-[280px] overflow-y-auto text-sm"></div>
+                <div id="ant-container" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+            </div>
+
+            <!-- Control Panel - Basic Actions -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <button id="feed-btn" class="bg-primary hover:bg-opacity-80 text-white py-2 px-4 rounded transition">
+                    Feed Ants (10 🪙)
+                </button>
+                <button id="clean-btn" class="bg-primary hover:bg-opacity-80 text-white py-2 px-4 rounded transition">
+                    Clean (15 🪙)
+                </button>
+                <button id="speed-btn" class="bg-gray-600 dark:bg-gray-700 hover:bg-opacity-80 text-white py-2 px-4 rounded transition">
+                    Speed: Normal
+                </button>
+                <button id="upgrade-btn" class="bg-secondary hover:bg-opacity-80 text-white py-2 px-4 rounded transition">
+                    Upgrades
+                </button>
+            </div>
+
+            <!-- Upgrade Panel (Hidden by default) -->
+            <div id="upgrade-panel" class="bg-gray-100 dark:bg-dark-panel rounded-lg p-4 mb-4 shadow hidden">
+                <h3 class="font-bold mb-3 text-primary">Colony Upgrades</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Improve Nest (<span id="nest-cost">50</span> 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Increases food storage and cleanliness</p>
+                        <button id="upgrade-nest-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Upgrade</button>
+                    </div>
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Train Forager (30 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Collects food automatically</p>
+                        <button id="train-forager-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Train</button>
+                    </div>
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Train Soldier (35 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Protects colony, reduces predator damage</p>
+                        <button id="train-soldier-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Train</button>
+                    </div>
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Train Nurse (40 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Boosts larvae development by 25%</p>
+                        <button id="train-nurse-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Train</button>
+                    </div>
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Train Excavator (45 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Helps build chambers faster</p>
+                        <button id="train-excavator-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Train</button>
+                    </div>
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Buy Worker (25 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">General colony maintenance</p>
+                        <button id="buy-worker-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Buy</button>
+                    </div>
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Royal Jelly (45 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Extend queen's lifespan by 10 days</p>
+                        <button id="royal-jelly-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Purchase</button>
+                    </div>
+                    <div class="border border-gray-300 dark:border-gray-700 p-3 rounded">
+                        <h4 class="font-medium mb-1">Better Environment (40 🪙)</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Extends all ants' lifespan by 2 days</p>
+                        <button id="environment-btn" class="bg-primary text-white py-1 px-3 rounded text-sm">Improve</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Display -->
+            <div class="bg-gray-100 dark:bg-dark-panel rounded-lg p-4 shadow mb-4">
+                <h3 class="font-bold mb-2 text-sm uppercase text-gray-600 dark:text-gray-400">Activity Log</h3>
+                <div id="log-container" class="h-[150px] overflow-y-auto text-sm space-y-1"></div>
+            </div>
+        </div>
+
+        <!-- Territory Tab -->
+        <div id="territory-tab" class="tab-content">
+            <div class="mb-4">
+                <h2 class="text-xl font-bold text-primary mb-2">Colony Territory</h2>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Build and upgrade chambers to enhance your colony's capabilities.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Food Storage Chamber -->
+                    <div class="chamber bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-lg font-bold">Food Storage Chamber</h3>
+                            <span id="foodstorage-level" class="bg-primary text-white text-xs py-1 px-2 rounded">Level 1</span>
+                        </div>
+                        <p class="text-sm mb-3">Increases maximum food storage capacity and reduces food decay.</p>
+                        <div class="flex justify-between items-center text-sm">
+                            <div>
+                                <div>Storage: <span id="foodstorage-capacity">100</span> units</div>
+                                <div>Decay Rate: -<span id="foodstorage-decay">10</span>%</div>
+                            </div>
+                            <div id="foodstorage-cost-container">
+                                <button id="build-foodstorage-btn" class="bg-primary hover:bg-opacity-80 text-white py-1 px-3 rounded text-sm">
+                                    Build (<span id="foodstorage-cost">75</span> 🪙)
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span id="foodstorage-excavation" class="hidden">Excavation: <span id="foodstorage-progress">0</span>%</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Nursery Chamber -->
+                    <div class="chamber bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-lg font-bold">Nursery Chamber</h3>
+                            <span id="nursery-level" class="bg-primary text-white text-xs py-1 px-2 rounded">Level 0</span>
+                        </div>
+                        <p class="text-sm mb-3">Boosts egg production and speeds up larvae development.</p>
+                        <div class="flex justify-between items-center text-sm">
+                            <div>
+                                <div>Egg Boost: +<span id="nursery-egg-boost">0</span>%</div>
+                                <div>Growth Speed: +<span id="nursery-growth">0</span>%</div>
+                            </div>
+                            <div id="nursery-cost-container">
+                                <button id="build-nursery-btn" class="bg-primary hover:bg-opacity-80 text-white py-1 px-3 rounded text-sm">
+                                    Build (<span id="nursery-cost">100</span> 🪙)
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span id="nursery-excavation" class="hidden">Excavation: <span id="nursery-progress">0</span>%</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Defense Chamber -->
+                    <div class="chamber bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-lg font-bold">Defense Chamber</h3>
+                            <span id="defense-level" class="bg-primary text-white text-xs py-1 px-2 rounded">Level 0</span>
+                        </div>
+                        <p class="text-sm mb-3">Fortifies the colony against predators and boosts soldier effectiveness.</p>
+                        <div class="flex justify-between items-center text-sm">
+                            <div>
+                                <div>Base Defense: +<span id="defense-bonus">0</span></div>
+                                <div>Soldier Boost: +<span id="defense-soldier-boost">0</span>%</div>
+                            </div>
+                            <div id="defense-cost-container">
+                                <button id="build-defense-btn" class="bg-primary hover:bg-opacity-80 text-white py-1 px-3 rounded text-sm">
+                                    Build (<span id="defense-cost">90</span> 🪙)
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span id="defense-excavation" class="hidden">Excavation: <span id="defense-progress">0</span>%</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Royal Chamber -->
+                    <div class="chamber bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-lg font-bold">Royal Chamber</h3>
+                            <span id="royal-level" class="bg-primary text-white text-xs py-1 px-2 rounded">Level 0</span>
+                        </div>
+                        <p class="text-sm mb-3">Enhances queen productivity and extends her lifespan.</p>
+                        <div class="flex justify-between items-center text-sm">
+                            <div>
+                                <div>Queen Lifespan: +<span id="royal-queen-life">0</span> days</div>
+                                <div>Egg Laying: +<span id="royal-egg-rate">0</span>%</div>
+                            </div>
+                            <div id="royal-cost-container">
+                                <button id="build-royal-btn" class="bg-primary hover:bg-opacity-80 text-white py-1 px-3 rounded text-sm">
+                                    Build (<span id="royal-cost">120</span> 🪙)
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span id="royal-excavation" class="hidden">Excavation: <span id="royal-progress">0</span>%</span>
+                        </div>
+                    </div>
+                    
+                    <!-- NEW: Treasure Chamber -->
+                    <div class="chamber bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-lg font-bold">Treasure Chamber</h3>
+                            <span id="treasure-level" class="bg-primary text-white text-xs py-1 px-2 rounded">Level 0</span>
+                        </div>
+                        <p class="text-sm mb-3">Generates a steady flow of coins through complex fungal exchange networks.</p>
+                        <div class="flex justify-between items-center text-sm">
+                            <div>
+                                <div>Coin Generation: +<span id="treasure-coin-rate">0</span> / 30s</div>
+                                <div>Bonus Chance: +<span id="treasure-bonus-chance">0</span>%</div>
+                            </div>
+                            <div id="treasure-cost-container">
+                                <button id="build-treasure-btn" class="bg-primary hover:bg-opacity-80 text-white py-1 px-3 rounded text-sm">
+                                    Build (<span id="treasure-cost">150</span> 🪙)
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span id="treasure-excavation" class="hidden">Excavation: <span id="treasure-progress">0</span>%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div id="statistics-tab" class="tab-content">
+            <div class="mb-4">
+                <h2 class="text-xl font-bold text-primary mb-2">Colony Statistics</h2>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Track your colony's growth and resource management over time.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Population Chart -->
+                    <div class="bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-bold mb-3">Population Trends</h3>
+                        <div class="h-[250px]">
+                            <canvas id="population-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Resources Chart -->
+                    <div class="bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-bold mb-3">Resource History</h3>
+                        <div class="h-[250px]">
+                            <canvas id="resource-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow mb-4">
+                    <h3 class="text-lg font-bold mb-3">Colony Lifecycle</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <h4 class="font-medium mb-1">Birth Statistics</h4>
+                            <div class="text-sm">
+                                <div>Total ants born: <span id="stat-ants-born">0</span></div>
+                                <div>Queens hatched: <span id="stat-queens-born">0</span></div>
+                                <div>Birth rate: <span id="stat-birth-rate">0</span>/day</div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-medium mb-1">Death Statistics</h4>
+                            <div class="text-sm">
+                                <div>Natural deaths: <span id="stat-natural-deaths">0</span></div>
+                                <div>Predator deaths: <span id="stat-predator-deaths">0</span></div>
+                                <div>Starvation deaths: <span id="stat-starvation-deaths">0</span></div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-medium mb-1">Colony Records</h4>
+                            <div class="text-sm">
+                                <div>Max population: <span id="stat-max-population">5</span></div>
+                                <div>Longest queen: <span id="stat-longest-queen">0</span> days</div>
+                                <div>Colony age: <span id="stat-colony-age">1</span> days</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prestige Tab -->
+        <div id="prestige-tab" class="tab-content">
+            <div class="mb-4">
+                <h2 class="text-xl font-bold text-primary mb-2">Colony Prestige</h2>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Reset your colony to earn permanent bonuses for future generations.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Prestige Info -->
+                    <div class="bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-bold mb-3">Prestige Information</h3>
+                        <p class="text-sm mb-4">Prestige resets your colony but provides permanent bonuses for your next colony. Prestige points are calculated based on your colony's achievements.</p>
+                        
+                        <div class="mb-4">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm font-medium">Current Prestige Points:</span>
+                                <span id="current-prestige" class="font-bold">0</span>
+                            </div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm font-medium">New Prestige Points Available:</span>
+                                <span id="new-prestige" class="font-bold text-green-600">0</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-sm font-medium">Total After Reset:</span>
+                                <span id="total-prestige" class="font-bold">0</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h4 class="font-medium mb-2">Prestige Calculation</h4>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div>Max Population: <span id="prestige-population">0</span></div>
+                                <div>Colony Age: <span id="prestige-age">0</span></div>
+                                <div>Chambers Built: <span id="prestige-chambers">0</span></div>
+                                <div>Base Points: <span id="prestige-base">0</span></div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4">
+                            <p class="text-sm text-yellow-700">
+                                <strong>How to Prestige:</strong> Grow your colony until you have at least 5 prestige points available (shown in green above). Then click the reset button below to get permanent bonuses!
+                            </p>
+                        </div>
+                        
+                        <button id="prestige-reset-btn" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                            Reset Colony for Prestige
+                        </button>
+                        <p class="text-xs text-gray-500 mt-2">Warning: This will reset all progress except prestige bonuses!</p>
+                    </div>
+                    
+                    <!-- Prestige Bonuses -->
+                    <div class="bg-gray-50 dark:bg-dark-panel p-4 rounded-lg shadow">
+                        <h3 class="text-lg font-bold mb-3">Prestige Bonuses</h3>
+                        <p class="text-sm mb-4">Your prestige points provide the following permanent bonuses:</p>
+                        
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Resource Generation:</span>
+                                    <span id="prestige-resource-bonus" class="font-bold">+0%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div id="prestige-resource-bar" class="bg-green-500 h-2 rounded-full" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Ant Lifespan:</span>
+                                    <span id="prestige-lifespan-bonus" class="font-bold">+0 days</span>
+                                </div>
+                                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div id="prestige-lifespan-bar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Starting Resources:</span>
+                                    <span id="prestige-starting-bonus" class="font-bold">+0%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div id="prestige-starting-bar" class="bg-purple-500 h-2 rounded-full" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Chamber Building Speed:</span>
+                                    <span id="prestige-building-bonus" class="font-bold">+0%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div id="prestige-building-bar" class="bg-yellow-500 h-2 rounded-full" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium">Queen Egg Production:</span>
+                                    <span id="prestige-queen-bonus" class="font-bold">+0%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div id="prestige-queen-bar" class="bg-pink-500 h-2 rounded-full" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Save/Load Panel -->
+        <div id="data-panel" class="bg-gray-100 dark:bg-dark-panel rounded-lg p-4 mb-4 shadow">
+            <div class="flex flex-wrap justify-between items-center">
+                <h3 class="font-bold mb-2 text-primary tooltip">
+                    Save & Load
+                    <div class="tooltip-content">
+                        <ul class="list-disc pl-4 space-y-1">
+                            <li>Auto-save occurs every 60 seconds</li>
+                            <li>Offline progress is calculated when you return</li>
+                            <li>Quick Save immediately saves to your browser</li>
+                            <li>Export/Import lets you move your save between devices</li>
+                        </ul>
+                    </div>
+                </h3>
+                <div class="space-x-2">
+                    <button id="quick-save-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white py-1 px-3 rounded text-sm">
+                        Quick Save
+                    </button>
+                    <button id="save-btn" class="bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded text-sm">
+                        Export Save
+                    </button>
+                    <button id="load-btn" class="bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 rounded text-sm">
+                        Import Save
+                    </button>
+                    <button id="reset-btn" class="bg-red-600 hover:bg-red-700 text-white py-1 px-3 rounded text-sm">
+                        New Game
+                    </button>
+                </div>
+            </div>
+            <div id="save-load-container" class="hidden mt-3">
+                <textarea id="save-text" class="w-full h-24 p-2 text-sm font-mono border border-gray-300 dark:border-gray-700 rounded dark:bg-gray-800 dark:text-gray-200" placeholder="Paste save data here..."></textarea>
+                <div class="flex justify-end mt-2">
+                    <button id="close-save-load-btn" class="bg-gray-500 hover:bg-gray-600 text-white py-1 px-3 rounded text-sm">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Support and Footer -->
+        <div class="mt-6 text-center">
+            <div class="mb-4">
+                <h3 class="font-medium text-sm mb-2 text-gray-600 dark:text-gray-400">Support the Developer</h3>
+                <div class="flex justify-center space-x-4">
+                    <a href="https://ko-fi.com/cygryu" target="_blank" rel="noopener noreferrer" class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm">Ko-Fi</a>
+                    <a href="https://www.paypal.com/paypalme/sofiansu?country.x=ID&locale.x=en_US" target="_blank" rel="noopener noreferrer" class="bg-blue-700 hover:bg-blue-800 text-white py-1 px-3 rounded text-sm">PayPal</a>
+                </div>
+            </div>
+            <p class="text-sm text-gray-500 dark:text-gray-500">Developed by CygRyu</p>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+    
+    <!-- Autosave Indicator -->
+    <div id="autosave-indicator" class="autosave-indicator">Autosaving...</div>
+
+    <script>
+        // Initialize dark mode based on user preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // Game state
+        const state = {
+            // Individual ants with age tracking
+            antColony: {
+                queen: [{ birthDay: 0, maxAge: 60 }], // Queen lives longer
+                workers: [
+                    { birthDay: 0, maxAge: 20 },
+                    { birthDay: 0, maxAge: 20 },
+                    { birthDay: 0, maxAge: 20 },
+                    { birthDay: 0, maxAge: 20 }
+                ],
+                soldiers: [],
+                foragers: [],
+                nurses: [],   // New specialized ant type
+                excavators: [] // New specialized ant type
+            },
+            food: 50,
+            cleanliness: 80,
+            coins: 100,
+            day: 1,
+            speed: 1,
+            eggs: 0,
+            larvae: 0,
+            autoFeed: false,
+            
+            // Territory system (chambers)
+            chambers: {
+                foodStorage: { level: 1, built: true, building: false, progress: 100, upgradeCost: 75 },
+                nursery: { level: 0, built: false, building: false, progress: 0, upgradeCost: 100 },
+                defense: { level: 0, built: false, building: false, progress: 0, upgradeCost: 90 },
+                royal: { level: 0, built: false, building: false, progress: 0, upgradeCost: 120 },
+                treasure: { level: 0, built: false, building: false, progress: 0, upgradeCost: 150 }
+            },
+            
+            upgrades: {
+                nestLevel: 1,
+                foodStorage: 100, // Max food capacity, enhanced by food storage chamber
+                efficiency: 1, // Multiplier for ant production
+                nestCost: 50, // Starting cost, will scale with level
+                environmentLevel: 1 // Affects ant lifespan
+            },
+            
+            // Statistics tracking
+            stats: {
+                antsBorn: 0,
+                queensBorn: 0,
+                naturalDeaths: 0,
+                predatorDeaths: 0,
+                starvationDeaths: 0,
+                maxPopulation: 5,
+                longestQueenLife: 0,
+                populationHistory: [], // For charts
+                resourceHistory: [],   // For charts
+                birthRate: 0
+            },
+            
+            // Prestige system
+            prestige: {
+                points: 0,
+                resourceBonus: 0,
+                lifespanBonus: 0,
+                startingBonus: 0,
+                buildingBonus: 0,
+                queenBonus: 0
+            },
+            
+            lastEventDay: 0,
+            lastTimestamp: Date.now(), // For offline progress calculation
+            logHistory: []
+        };
+
+        // Game settings
+        const settings = {
+            foodDecayRate: 0.1,  // Food units per second
+            cleanlinessDecayRate: 0.15, // Cleanliness units per second
+            antFoodConsumption: 0.03,  // Food per ant per second
+            queenEggChance: 0.03,  // Chance per second
+            eggHatchTime: 60,  // Seconds
+            larvaPupaTime: 120,  // Seconds
+            coinGenerationRate: 4, // Coins per 30 seconds
+            passiveFoodGeneration: 0.05, // Food per forager per second
+            cleaningEfficiency: 0.01, // Cleanliness per worker per second
+            soldierDefenseValue: 0.1, // Protection value per soldier
+            autoFeedThreshold: 20, // Food level that triggers auto-feeding
+            
+            // Specialized ant bonuses
+            nurseEggBoost: 0.1, // Reduction in larvae development time per nurse
+            excavatorBuildBoost: 0.15, // Boost to chamber building speed per excavator
+            
+            // Chamber effects
+            foodStorageDecayReduction: 0.1, // Decrease in food decay per level
+            nurseryEggBoost: 0.15, // Increase in egg production per level
+            nurseryGrowthSpeed: 0.15, // Increase in larvae development per level
+            defenseBonus: 1, // Base defense bonus per level
+            defenseSoldierBoost: 0.2, // Boost to soldier effectiveness per level
+            royalQueenLifeBonus: 5, // Extra days of queen lifespan per level
+            royalEggRateBonus: 0.1, // Increase in egg laying chance per level
+            treasureCoinBonus: 1, // Extra coins generated per 30 seconds per level
+            treasureBonusChance: 0.05, // Chance to get bonus coins per level
+            
+            // Cost multipliers
+            nestCostMultiplier: 1.5, // Cost increases by this factor each level
+            chamberCostMultiplier: 1.7, // Cost increases by this factor each level
+            nestStorageMultiplier: 1.3, // Storage increases by this factor each level
+            
+            // Ant lifespans
+            baseWorkerLifespan: 20, // Days
+            baseForagerLifespan: 15, // Days
+            baseSoldierLifespan: 25, // Days
+            baseQueenLifespan: 60, // Days
+            baseNurseLifespan: 18, // Days
+            baseExcavatorLifespan: 22, // Days
+            environmentBonus: 2, // Additional days per environment upgrade
+            
+            // Prestige calculation
+            prestigePopulationFactor: 0.1, // Points per max population
+            prestigeAgeFactor: 0.05, // Points per day of colony age
+            prestigeChamberFactor: 1, // Points per chamber level
+            
+            // Auto-save settings
+            autoSaveInterval: 60, // Seconds between auto-saves
+            
+            // Other
+            statisticsInterval: 6, // Seconds between statistics updates
+            chamberBuildRate: 0.5, // Base percentage per second
+            prestigeRequirement: 5, // Minimum prestige points needed to reset
+            
+            antBehaviors: ['exploring', 'eating', 'resting', 'cleaning', 'foraging', 'defending', 'nursing', 'excavating'],
+            antVerbs: ['crawls', 'scurries', 'wanders', 'moves'],
+            antDirs: ['north', 'south', 'east', 'west', 'around', 'in circles'],
+            
+            randomEvents: [
+                { name: 'foodFind', message: 'Your ants discovered a food cache!', chance: 0.01, effect: () => { 
+                    state.food = Math.min(state.upgrades.foodStorage, state.food + 20); 
+                }},
+                { name: 'antBoost', message: 'A friendly ant joined your colony!', chance: 0.005, effect: () => { 
+                    state.antColony.workers.push({ 
+                        birthDay: state.day, 
+                        maxAge: settings.baseWorkerLifespan + 
+                               ((state.upgrades.environmentLevel - 1) * settings.environmentBonus) + 
+                               state.prestige.lifespanBonus
+                    });
+                    state.stats.antsBorn++;
+                }},
+                { name: 'predator', message: 'A predator is threatening the colony!', chance: 0.007, effect: () => { 
+                    // Calculate defense from soldiers and defense chamber
+                    const baseDefense = state.chambers.defense.level * settings.defenseBonus;
+                    const soldierBoost = 1 + (state.chambers.defense.level * settings.defenseSoldierBoost);
+                    const soldierDefense = state.antColony.soldiers.length * settings.soldierDefenseValue * soldierBoost;
+                    const totalDefense = baseDefense + soldierDefense;
+                    
+                    const damage = Math.max(0, Math.floor(Math.random() * 3) - totalDefense);
+                    if (damage > 0 && state.antColony.workers.length > 0) {
+                        // Remove random workers up to the damage amount
+                        let actualDamage = 0;
+                        for (let i = 0; i < damage && state.antColony.workers.length > 0; i++) {
+                            const randomIndex = Math.floor(Math.random() * state.antColony.workers.length);
+                            state.antColony.workers.splice(randomIndex, 1);
+                            actualDamage++;
+                        }
+                        addLog(`Lost ${actualDamage} worker ant${actualDamage > 1 ? 's' : ''} to the predator!`);
+                        state.stats.predatorDeaths += actualDamage;
+                    } else if (totalDefense > 0) {
+                        addLog('Your defenses successfully protected the colony!');
+                    }
+                }},
+                { name: 'treasureFind', message: 'Your ants discovered a valuable resource!', chance: 0.003, effect: () => {
+                    // Bonus is related to treasure chamber level
+                    const treasureBonus = state.chambers.treasure.level > 0 ? state.chambers.treasure.level * 5 : 2;
+                    state.coins += treasureBonus; 
+                    addLog(`Found ${treasureBonus} coins from a valuable resource!`);
+                }}
+            ]
+        };
+
+        // Element references
+        const elements = {
+            // Population stats
+            populationCount: document.getElementById('population-count'),
+            queenCount: document.getElementById('queen-count'),
+            workerCount: document.getElementById('worker-count'),
+            specializedCount: document.getElementById('specialized-count'),
+            lifecycleInfo: document.getElementById('lifecycle-info'),
+            
+            // Resource stats
+            foodLevel: document.getElementById('food-level'),
+            foodBar: document.getElementById('food-bar'),
+            foodRate: document.getElementById('food-rate'),
+            cleanLevel: document.getElementById('clean-level'),
+            cleanBar: document.getElementById('clean-bar'),
+            larvaeInfo: document.getElementById('larvae-info'),
+            coinCount: document.getElementById('coin-count'),
+            coinRate: document.getElementById('coin-rate'),
+            nestLevel: document.getElementById('nest-level'),
+            prestigeInfo: document.getElementById('prestige-info'),
+            autoFeedToggle: document.getElementById('auto-feed-toggle'),
+            
+            // Day counter
+            dayCounter: document.getElementById('day-counter'),
+            
+            // Display elements
+            aquariumDisplay: document.getElementById('aquarium-display'),
+            antContainer: document.getElementById('ant-container'),
+            logContainer: document.getElementById('log-container'),
+            
+            // Action buttons
+            feedBtn: document.getElementById('feed-btn'),
+            cleanBtn: document.getElementById('clean-btn'),
+            buyWorkerBtn: document.getElementById('buy-worker-btn'),
+            speedBtn: document.getElementById('speed-btn'),
+            upgradeBtn: document.getElementById('upgrade-btn'),
+            upgradePanel: document.getElementById('upgrade-panel'),
+            upgradeNestBtn: document.getElementById('upgrade-nest-btn'),
+            trainForagerBtn: document.getElementById('train-forager-btn'),
+            trainSoldierBtn: document.getElementById('train-soldier-btn'),
+            trainNurseBtn: document.getElementById('train-nurse-btn'),
+            trainExcavatorBtn: document.getElementById('train-excavator-btn'),
+            royalJellyBtn: document.getElementById('royal-jelly-btn'),
+            environmentBtn: document.getElementById('environment-btn'),
+            nestCost: document.getElementById('nest-cost'),
+            
+            // Chamber elements
+            foodStorageLevel: document.getElementById('foodstorage-level'),
+            foodStorageCapacity: document.getElementById('foodstorage-capacity'),
+            foodStorageDecay: document.getElementById('foodstorage-decay'),
+            foodStorageCost: document.getElementById('foodstorage-cost'),
+            buildFoodStorageBtn: document.getElementById('build-foodstorage-btn'),
+            foodStorageExcavation: document.getElementById('foodstorage-excavation'),
+            foodStorageProgress: document.getElementById('foodstorage-progress'),
+            
+            nurseryLevel: document.getElementById('nursery-level'),
+            nurseryEggBoost: document.getElementById('nursery-egg-boost'),
+            nurseryGrowth: document.getElementById('nursery-growth'),
+            nurseryCost: document.getElementById('nursery-cost'),
+            buildNurseryBtn: document.getElementById('build-nursery-btn'),
+            nurseryExcavation: document.getElementById('nursery-excavation'),
+            nurseryProgress: document.getElementById('nursery-progress'),
+            
+            defenseLevel: document.getElementById('defense-level'),
+            defenseBonus: document.getElementById('defense-bonus'),
+            defenseSoldierBoost: document.getElementById('defense-soldier-boost'),
+            defenseCost: document.getElementById('defense-cost'),
+            buildDefenseBtn: document.getElementById('build-defense-btn'),
+            defenseExcavation: document.getElementById('defense-excavation'),
+            defenseProgress: document.getElementById('defense-progress'),
+            
+            royalLevel: document.getElementById('royal-level'),
+            royalQueenLife: document.getElementById('royal-queen-life'),
+            royalEggRate: document.getElementById('royal-egg-rate'),
+            royalCost: document.getElementById('royal-cost'),
+            buildRoyalBtn: document.getElementById('build-royal-btn'),
+            royalExcavation: document.getElementById('royal-excavation'),
+            royalProgress: document.getElementById('royal-progress'),
+            
+            // New Treasure Chamber elements
+            treasureLevel: document.getElementById('treasure-level'),
+            treasureCoinRate: document.getElementById('treasure-coin-rate'),
+            treasureBonusChance: document.getElementById('treasure-bonus-chance'),
+            treasureCost: document.getElementById('treasure-cost'),
+            buildTreasureBtn: document.getElementById('build-treasure-btn'),
+            treasureExcavation: document.getElementById('treasure-excavation'),
+            treasureProgress: document.getElementById('treasure-progress'),
+            
+            // Statistics elements
+            statAntsBorn: document.getElementById('stat-ants-born'),
+            statQueensBorn: document.getElementById('stat-queens-born'),
+            statBirthRate: document.getElementById('stat-birth-rate'),
+            statNaturalDeaths: document.getElementById('stat-natural-deaths'),
+            statPredatorDeaths: document.getElementById('stat-predator-deaths'),
+            statStarvationDeaths: document.getElementById('stat-starvation-deaths'),
+            statMaxPopulation: document.getElementById('stat-max-population'),
+            statLongestQueen: document.getElementById('stat-longest-queen'),
+            statColonyAge: document.getElementById('stat-colony-age'),
+            
+            // Prestige elements
+            currentPrestige: document.getElementById('current-prestige'),
+            newPrestige: document.getElementById('new-prestige'),
+            totalPrestige: document.getElementById('total-prestige'),
+            prestigePopulation: document.getElementById('prestige-population'),
+            prestigeAge: document.getElementById('prestige-age'),
+            prestigeChambers: document.getElementById('prestige-chambers'),
+            prestigeBase: document.getElementById('prestige-base'),
+            prestigeResetBtn: document.getElementById('prestige-reset-btn'),
+            
+            prestigeResourceBonus: document.getElementById('prestige-resource-bonus'),
+            prestigeResourceBar: document.getElementById('prestige-resource-bar'),
+            prestigeLifespanBonus: document.getElementById('prestige-lifespan-bonus'),
+            prestigeLifespanBar: document.getElementById('prestige-lifespan-bar'),
+            prestigeStartingBonus: document.getElementById('prestige-starting-bonus'),
+            prestigeStartingBar: document.getElementById('prestige-starting-bar'),
+            prestigeBuildingBonus: document.getElementById('prestige-building-bonus'),
+            prestigeBuildingBar: document.getElementById('prestige-building-bar'),
+            prestigeQueenBonus: document.getElementById('prestige-queen-bonus'),
+            prestigeQueenBar: document.getElementById('prestige-queen-bar'),
+            
+            // Save/Load elements
+            saveBtn: document.getElementById('save-btn'),
+            loadBtn: document.getElementById('load-btn'),
+            quickSaveBtn: document.getElementById('quick-save-btn'),
+            resetBtn: document.getElementById('reset-btn'),
+            saveText: document.getElementById('save-text'),
+            saveLoadContainer: document.getElementById('save-load-container'),
+            closeSaveLoadBtn: document.getElementById('close-save-load-btn'),
+            autosaveIndicator: document.getElementById('autosave-indicator'),
+            
+            // Tab elements
+            tabLinks: document.querySelectorAll('.tab-link'),
+            tabContents: document.querySelectorAll('.tab-content'),
+            
+            // Notification elements
+            notificationContainer: document.getElementById('notification-container')
+        };
+
+        // Chart references
+        let populationChart = null;
+        let resourceChart = null;
+        
+        // Auto-save timer
+        let autoSaveTimer = 0;
+
+        // Notification System
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            
+            // Choose icon based on notification type
+            let icon = '';
+            switch(type) {
+                case 'success':
+                    icon = '✅';
+                    break;
+                case 'warning':
+                    icon = '⚠️';
+                    break;
+                case 'error':
+                    icon = '❌';
+                    break;
+                default:
+                    icon = 'ℹ️';
+            }
+            
+            notification.innerHTML = `
+                <span class="notification-icon">${icon}</span>
+                <span>${message}</span>
+            `;
+            
+            elements.notificationContainer.appendChild(notification);
+            
+            // Remove notification after animation completes
+            setTimeout(() => {
+                notification.remove();
+            }, 4000); // Matches the animation duration
+        }
+        
+        // Auto-save indicator
+        function showAutoSaveIndicator() {
+            elements.autosaveIndicator.classList.add('active');
+            setTimeout(() => {
+                elements.autosaveIndicator.classList.remove('active');
+            }, 2000);
+        }
+
+        // Helper functions
+        function updateStats() {
+            // Count ants by type
+            const totalAnts = state.antColony.queen.length + 
+                             state.antColony.workers.length + 
+                             state.antColony.soldiers.length + 
+                             state.antColony.foragers.length +
+                             state.antColony.nurses.length +
+                             state.antColony.excavators.length;
+            
+            // Update total population stats
+            elements.populationCount.textContent = totalAnts;
+            elements.queenCount.textContent = `Queen: ${state.antColony.queen.length}`;
+            elements.workerCount.textContent = `Workers: ${state.antColony.workers.length}`;
+            
+            // Update day counter
+            elements.dayCounter.textContent = `Day ${state.day}`;
+            
+            // Update specialized count
+            const specializedCount = state.antColony.soldiers.length + 
+                                    state.antColony.foragers.length +
+                                    state.antColony.nurses.length +
+                                    state.antColony.excavators.length;
+            elements.specializedCount.textContent = `Specialized: ${specializedCount}`;
+            
+            // Calculate average ant age
+            let totalAge = 0;
+            const allAnts = [
+                ...state.antColony.queen,
+                ...state.antColony.workers, 
+                ...state.antColony.soldiers, 
+                ...state.antColony.foragers,
+                ...state.antColony.nurses,
+                ...state.antColony.excavators
+            ];
+            
+            for (const ant of allAnts) {
+                totalAge += state.day - ant.birthDay;
+            }
+            
+            const avgAge = allAnts.length > 0 ? Math.round(totalAge / allAnts.length) : 0;
+            elements.lifecycleInfo.textContent = `Avg Age: ${avgAge}d`;
+            
+            // Update food stats
+            elements.foodLevel.textContent = Math.floor(state.food);
+            elements.foodBar.style.width = `${Math.min(100, Math.max(0, (state.food / state.upgrades.foodStorage) * 100))}%`;
+            
+            // Calculate food generation rate from foragers, adjusted by prestige
+            const foragerBonus = 1 + (state.prestige.resourceBonus / 100);
+            const foodPerMinute = Math.round(state.antColony.foragers.length * settings.passiveFoodGeneration * 60 * foragerBonus);
+            elements.foodRate.textContent = `+${foodPerMinute} per min`;
+            
+            // Update food bar color based on level
+            if (state.food < settings.autoFeedThreshold) {
+                elements.foodBar.classList.remove('bg-green-500');
+                elements.foodBar.classList.add('bg-red-500');
+            } else {
+                elements.foodBar.classList.remove('bg-red-500');
+                elements.foodBar.classList.add('bg-green-500');
+            }
+            
+            // Update cleanliness stats
+            elements.cleanLevel.textContent = Math.floor(state.cleanliness);
+            elements.cleanBar.style.width = `${Math.min(100, Math.max(0, state.cleanliness))}%`;
+            if (state.cleanliness < 30) {
+                elements.cleanBar.classList.remove('bg-blue-500');
+                elements.cleanBar.classList.add('bg-red-500');
+            } else {
+                elements.cleanBar.classList.remove('bg-red-500');
+                elements.cleanBar.classList.add('bg-blue-500');
+            }
+            
+            // Update larvae info
+            elements.larvaeInfo.textContent = `Eggs: ${state.eggs} | Larvae: ${state.larvae}`;
+            
+            // Update coin stats - including treasure chamber bonus
+            elements.coinCount.textContent = state.coins;
+            
+            // Calculate coin generation rate including treasure chamber
+            const baseCoinRate = settings.coinGenerationRate;
+            const treasureCoinBonus = state.chambers.treasure.built ? 
+                                     (state.chambers.treasure.level * settings.treasureCoinBonus) : 0;
+            const totalCoinRate = baseCoinRate + treasureCoinBonus;
+            
+            elements.coinRate.textContent = `+${totalCoinRate} every 30s`;
+            elements.nestLevel.textContent = `Nest Level: ${state.upgrades.nestLevel}`;
+            
+            // Update prestige info
+            elements.prestigeInfo.textContent = `Prestige: ${state.prestige.points}`;
+            
+            // Update nest upgrade cost
+            elements.nestCost.textContent = Math.round(state.upgrades.nestCost);
+            
+            // Update auto-feed toggle
+            elements.autoFeedToggle.checked = state.autoFeed;
+            
+            // Update chambers
+            updateChamberDisplay();
+
+            // Update statistic values
+            updateStatisticsDisplay();
+            
+            // Update prestige values
+            updatePrestigeDisplay();
+        }
+
+        function updateChamberDisplay() {
+            // Food Storage Chamber
+            elements.foodStorageLevel.textContent = `Level ${state.chambers.foodStorage.level}`;
+            elements.foodStorageCapacity.textContent = state.upgrades.foodStorage;
+            elements.foodStorageDecay.textContent = (state.chambers.foodStorage.level * settings.foodStorageDecayReduction * 100).toFixed(0);
+            
+            if (state.chambers.foodStorage.built) {
+                elements.foodStorageCost.textContent = state.chambers.foodStorage.upgradeCost;
+                elements.buildFoodStorageBtn.textContent = `Upgrade (${state.chambers.foodStorage.upgradeCost} 🪙)`;
+            } else {
+                elements.buildFoodStorageBtn.textContent = `Build (${state.chambers.foodStorage.upgradeCost} 🪙)`;
+            }
+            
+            if (state.chambers.foodStorage.building) {
+                elements.foodStorageExcavation.classList.remove('hidden');
+                elements.foodStorageProgress.textContent = Math.floor(state.chambers.foodStorage.progress);
+                elements.buildFoodStorageBtn.disabled = true;
+                elements.buildFoodStorageBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.foodStorageExcavation.classList.add('hidden');
+                elements.buildFoodStorageBtn.disabled = false;
+                elements.buildFoodStorageBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            
+            // Nursery Chamber
+            elements.nurseryLevel.textContent = `Level ${state.chambers.nursery.level}`;
+            elements.nurseryEggBoost.textContent = (state.chambers.nursery.level * settings.nurseryEggBoost * 100).toFixed(0);
+            elements.nurseryGrowth.textContent = (state.chambers.nursery.level * settings.nurseryGrowthSpeed * 100).toFixed(0);
+            
+            if (state.chambers.nursery.built) {
+                elements.nurseryCost.textContent = state.chambers.nursery.upgradeCost;
+                elements.buildNurseryBtn.textContent = `Upgrade (${state.chambers.nursery.upgradeCost} 🪙)`;
+            } else {
+                elements.buildNurseryBtn.textContent = `Build (${state.chambers.nursery.upgradeCost} 🪙)`;
+            }
+            
+            if (state.chambers.nursery.building) {
+                elements.nurseryExcavation.classList.remove('hidden');
+                elements.nurseryProgress.textContent = Math.floor(state.chambers.nursery.progress);
+                elements.buildNurseryBtn.disabled = true;
+                elements.buildNurseryBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.nurseryExcavation.classList.add('hidden');
+                elements.buildNurseryBtn.disabled = false;
+                elements.buildNurseryBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            
+            // Defense Chamber
+            elements.defenseLevel.textContent = `Level ${state.chambers.defense.level}`;
+            elements.defenseBonus.textContent = (state.chambers.defense.level * settings.defenseBonus).toFixed(1);
+            elements.defenseSoldierBoost.textContent = (state.chambers.defense.level * settings.defenseSoldierBoost * 100).toFixed(0);
+            
+            if (state.chambers.defense.built) {
+                elements.defenseCost.textContent = state.chambers.defense.upgradeCost;
+                elements.buildDefenseBtn.textContent = `Upgrade (${state.chambers.defense.upgradeCost} 🪙)`;
+            } else {
+                elements.buildDefenseBtn.textContent = `Build (${state.chambers.defense.upgradeCost} 🪙)`;
+            }
+            
+            if (state.chambers.defense.building) {
+                elements.defenseExcavation.classList.remove('hidden');
+                elements.defenseProgress.textContent = Math.floor(state.chambers.defense.progress);
+                elements.buildDefenseBtn.disabled = true;
+                elements.buildDefenseBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.defenseExcavation.classList.add('hidden');
+                elements.buildDefenseBtn.disabled = false;
+                elements.buildDefenseBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            
+            // Royal Chamber
+            elements.royalLevel.textContent = `Level ${state.chambers.royal.level}`;
+            elements.royalQueenLife.textContent = (state.chambers.royal.level * settings.royalQueenLifeBonus).toFixed(0);
+            elements.royalEggRate.textContent = (state.chambers.royal.level * settings.royalEggRateBonus * 100).toFixed(0);
+            
+            if (state.chambers.royal.built) {
+                elements.royalCost.textContent = state.chambers.royal.upgradeCost;
+                elements.buildRoyalBtn.textContent = `Upgrade (${state.chambers.royal.upgradeCost} 🪙)`;
+            } else {
+                elements.buildRoyalBtn.textContent = `Build (${state.chambers.royal.upgradeCost} 🪙)`;
+            }
+            
+            if (state.chambers.royal.building) {
+                elements.royalExcavation.classList.remove('hidden');
+                elements.royalProgress.textContent = Math.floor(state.chambers.royal.progress);
+                elements.buildRoyalBtn.disabled = true;
+                elements.buildRoyalBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.royalExcavation.classList.add('hidden');
+                elements.buildRoyalBtn.disabled = false;
+                elements.buildRoyalBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            
+            // Treasure Chamber
+            elements.treasureLevel.textContent = `Level ${state.chambers.treasure.level}`;
+            elements.treasureCoinRate.textContent = (state.chambers.treasure.level * settings.treasureCoinBonus).toFixed(0);
+            elements.treasureBonusChance.textContent = (state.chambers.treasure.level * settings.treasureBonusChance * 100).toFixed(0);
+            
+            if (state.chambers.treasure.built) {
+                elements.treasureCost.textContent = state.chambers.treasure.upgradeCost;
+                elements.buildTreasureBtn.textContent = `Upgrade (${state.chambers.treasure.upgradeCost} 🪙)`;
+            } else {
+                elements.buildTreasureBtn.textContent = `Build (${state.chambers.treasure.upgradeCost} 🪙)`;
+            }
+            
+            if (state.chambers.treasure.building) {
+                elements.treasureExcavation.classList.remove('hidden');
+                elements.treasureProgress.textContent = Math.floor(state.chambers.treasure.progress);
+                elements.buildTreasureBtn.disabled = true;
+                elements.buildTreasureBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.treasureExcavation.classList.add('hidden');
+                elements.buildTreasureBtn.disabled = false;
+                elements.buildTreasureBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function updateStatisticsDisplay() {
+            // Update colony statistics
+            elements.statAntsBorn.textContent = state.stats.antsBorn;
+            elements.statQueensBorn.textContent = state.stats.queensBorn;
+            elements.statBirthRate.textContent = state.stats.birthRate.toFixed(1);
+            elements.statNaturalDeaths.textContent = state.stats.naturalDeaths;
+            elements.statPredatorDeaths.textContent = state.stats.predatorDeaths;
+            elements.statStarvationDeaths.textContent = state.stats.starvationDeaths;
+            elements.statMaxPopulation.textContent = state.stats.maxPopulation;
+            elements.statLongestQueen.textContent = state.stats.longestQueenLife;
+            elements.statColonyAge.textContent = state.day;
+        }
+
+        function updatePrestigeDisplay() {
+            // Calculate new prestige points available
+            const maxPopulationPoints = state.stats.maxPopulation * settings.prestigePopulationFactor;
+            const agePoints = state.day * settings.prestigeAgeFactor;
+            
+            // Calculate chamber points
+            let chamberLevels = 0;
+            for (const chamber in state.chambers) {
+                chamberLevels += state.chambers[chamber].level;
+            }
+            const chamberPoints = chamberLevels * settings.prestigeChamberFactor;
+            
+            // Calculate base points
+            const basePoints = Math.floor(maxPopulationPoints + agePoints + chamberPoints);
+            
+            // Update prestige display
+            elements.currentPrestige.textContent = state.prestige.points;
+            elements.newPrestige.textContent = basePoints;
+            elements.totalPrestige.textContent = state.prestige.points + basePoints;
+            
+            elements.prestigePopulation.textContent = state.stats.maxPopulation;
+            elements.prestigeAge.textContent = state.day;
+            elements.prestigeChambers.textContent = chamberLevels;
+            elements.prestigeBase.textContent = basePoints;
+            
+            // Update prestige bonuses display
+            elements.prestigeResourceBonus.textContent = `+${state.prestige.resourceBonus}%`;
+            elements.prestigeResourceBar.style.width = `${Math.min(100, state.prestige.resourceBonus)}%`;
+            
+            elements.prestigeLifespanBonus.textContent = `+${state.prestige.lifespanBonus} days`;
+            elements.prestigeLifespanBar.style.width = `${Math.min(100, state.prestige.lifespanBonus * 10)}%`;
+            
+            elements.prestigeStartingBonus.textContent = `+${state.prestige.startingBonus}%`;
+            elements.prestigeStartingBar.style.width = `${Math.min(100, state.prestige.startingBonus)}%`;
+            
+            elements.prestigeBuildingBonus.textContent = `+${state.prestige.buildingBonus}%`;
+            elements.prestigeBuildingBar.style.width = `${Math.min(100, state.prestige.buildingBonus)}%`;
+            
+            elements.prestigeQueenBonus.textContent = `+${state.prestige.queenBonus}%`;
+            elements.prestigeQueenBar.style.width = `${Math.min(100, state.prestige.queenBonus)}%`;
+            
+            // Enable or disable prestige reset button
+            if (basePoints >= settings.prestigeRequirement) {
+                elements.prestigeResetBtn.disabled = false;
+                elements.prestigeResetBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.prestigeResetBtn.disabled = true;
+                elements.prestigeResetBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function addLog(message) {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry border-b border-gray-200 dark:border-gray-700 pb-1';
+            logEntry.textContent = `Day ${state.day}: ${message}`;
+            elements.logContainer.prepend(logEntry);
+            
+            // Store log in history for save/load
+            state.logHistory.push({day: state.day, message: message});
+            
+            // Keep log limited to recent entries
+            if (elements.logContainer.children.length > 100) {
+                elements.logContainer.removeChild(elements.logContainer.lastChild);
+            }
+            
+            // Keep history limited too
+            if (state.logHistory.length > 200) {
+                state.logHistory.shift();
+            }
+        }
+
+        function addAntActivity() {
+            // Get all ants by type into an array
+            const antTypes = [];
+            for (let i = 0; i < state.antColony.queen.length; i++) antTypes.push('queen');
+            for (let i = 0; i < state.antColony.workers.length; i++) antTypes.push('worker');
+            for (let i = 0; i < state.antColony.foragers.length; i++) antTypes.push('forager');
+            for (let i = 0; i < state.antColony.soldiers.length; i++) antTypes.push('soldier');
+            for (let i = 0; i < state.antColony.nurses.length; i++) antTypes.push('nurse');
+            for (let i = 0; i < state.antColony.excavators.length; i++) antTypes.push('excavator');
+            
+            if (antTypes.length === 0) return; // No ants to show activity
+            
+            const selectedAntType = antTypes[Math.floor(Math.random() * antTypes.length)];
+            const behavior = settings.antBehaviors[Math.floor(Math.random() * settings.antBehaviors.length)];
+            const verb = settings.antVerbs[Math.floor(Math.random() * settings.antVerbs.length)];
+            const direction = settings.antDirs[Math.floor(Math.random() * settings.antDirs.length)];
+            
+            const activityElement = document.createElement('div');
+            activityElement.className = 'activity-entry mb-2 px-2 py-1 bg-gray-50 dark:bg-gray-800 rounded text-sm';
+            
+            let activityText = '';
+            let antLabel = '';
+            
+            switch (selectedAntType) {
+                case 'queen':
+                    antLabel = 'Queen ant';
+                    break;
+                case 'worker':
+                    antLabel = 'Worker ant';
+                    break;
+                case 'forager':
+                    antLabel = 'Forager ant';
+                    break;
+                case 'soldier':
+                    antLabel = 'Soldier ant';
+                    break;
+                case 'nurse':
+                    antLabel = 'Nurse ant';
+                    break;
+                case 'excavator':
+                    antLabel = 'Excavator ant';
+                    break;
+            }
+            
+            // Custom behaviors based on ant type
+            if (selectedAntType === 'queen' && behavior === 'exploring') {
+                activityText = `${antLabel} is inspecting the eggs and larvae.`;
+            } else if (selectedAntType === 'forager' && (behavior === 'exploring' || behavior === 'foraging')) {
+                activityText = `${antLabel} ${verb} ${direction} searching for food.`;
+                
+                // Chance to find some food
+                if (Math.random() < 0.3) {
+                    const foragerBonus = 1 + (state.prestige.resourceBonus / 100);
+                    const foundFood = Math.floor((Math.random() * 3) + 1) * foragerBonus;
+                    state.food = Math.min(state.upgrades.foodStorage, state.food + foundFood);
+                    activityText += ` Found ${Math.floor(foundFood)} units of food!`;
+                }
+                
+                // Chance to find coins when treasure chamber is built
+                if (state.chambers.treasure.built && Math.random() < 0.05 + (state.chambers.treasure.level * 0.01)) {
+                    const foundCoins = Math.floor(Math.random() * 2) + 1;
+                    state.coins += foundCoins;
+                    activityText += ` Discovered ${foundCoins} coin${foundCoins > 1 ? 's' : ''}!`;
+                }
+            } else if (selectedAntType === 'soldier' && behavior === 'defending') {
+                activityText = `${antLabel} is patrolling the colony perimeter.`;
+            } else if (selectedAntType === 'nurse' && (behavior === 'nursing' || behavior === 'cleaning')) {
+                activityText = `${antLabel} is tending to the larvae and eggs.`;
+            } else if (selectedAntType === 'excavator' && behavior === 'excavating') {
+                activityText = `${antLabel} is digging and expanding the chambers.`;
+                
+                // Excavators contribute to chamber building process
+                boostChamberBuilding();
+                
+                // Excavators have a small chance to find treasure
+                if (Math.random() < 0.05 + (state.chambers.treasure.level * 0.01)) {
+                    const foundCoins = 1;
+                    state.coins += foundCoins;
+                    activityText += ` Found ${foundCoins} coin while digging!`;
+                }
+            } else if (behavior === 'exploring') {
+                activityText = `${antLabel} ${verb} ${direction} exploring the colony.`;
+            } else if (behavior === 'eating') {
+                activityText = `${antLabel} is eating some food.`;
+            } else if (behavior === 'resting') {
+                activityText = `${antLabel} is resting in the chamber.`;
+            } else if (behavior === 'cleaning') {
+                activityText = `${antLabel} is cleaning the nest.`;
+                
+                // Workers help with cleanliness
+                if (selectedAntType === 'worker') {
+                    state.cleanliness = Math.min(100, state.cleanliness + settings.cleaningEfficiency * 10);
+                }
+            }
+            
+            activityElement.textContent = activityText;
+            elements.aquariumDisplay.appendChild(activityElement);
+            
+            // Create an animated ant icon with color based on type
+            createAntIcon(selectedAntType);
+            
+            // Keep display limited to recent activities
+            if (elements.aquariumDisplay.children.length > 15) {
+                elements.aquariumDisplay.removeChild(elements.aquariumDisplay.firstChild);
+            }
+            
+            // Auto-scroll to bottom
+            elements.aquariumDisplay.scrollTop = elements.aquariumDisplay.scrollHeight;
+        }
+
+        function createAntIcon(antType = 'worker') {
+            const antIcon = document.createElement('div');
+            antIcon.className = `ant-icon ant-${antType}`;
+            antIcon.style.setProperty('--delay', `${Math.random() * 2}s`);
+            antIcon.textContent = '🐜';
+            antIcon.style.position = 'absolute';
+            antIcon.style.left = `${Math.random() * 90}%`;
+            antIcon.style.top = `${Math.random() * 90}%`;
+            antIcon.style.fontSize = '16px';
+            
+            elements.antContainer.appendChild(antIcon);
+            
+            // Remove ant icon after some time
+            setTimeout(() => {
+                antIcon.remove();
+            }, 10000 + Math.random() * 10000);
+        }
+
+        function triggerRandomEvent() {
+            // Only trigger events after a certain number of days have passed
+            if (state.day - state.lastEventDay < 2) return;
+            
+            for (const event of settings.randomEvents) {
+                // Adjust treasure find chance based on treasure chamber level
+                let eventChance = event.chance;
+                if (event.name === 'treasureFind' && state.chambers.treasure.built) {
+                    eventChance += state.chambers.treasure.level * settings.treasureBonusChance;
+                }
+                
+                if (Math.random() < eventChance) {
+                    addLog(event.message);
+                    event.effect();
+                    state.lastEventDay = state.day;
+                    
+                    // Show notification for random events
+                    showNotification(event.message, 'info');
+                    
+                    return; // Only trigger one event at a time
+                }
+            }
+        }
+        
+        function processAntLifecycle() {
+            // Process queen first
+            for (let i = state.antColony.queen.length - 1; i >= 0; i--) {
+                const ant = state.antColony.queen[i];
+                const age = state.day - ant.birthDay;
+                
+                // Track longest queen lifespan
+                if (age > state.stats.longestQueenLife) {
+                    state.stats.longestQueenLife = age;
+                }
+                
+                if (age >= ant.maxAge) {
+                    state.antColony.queen.splice(i, 1);
+                    addLog("Your queen ant has died of old age!");
+                    state.stats.naturalDeaths++;
+                    
+                    // Show notification for queen death - important!
+                    showNotification("Your queen ant has died of old age!", "warning");
+                    
+                    // If no queens left, add a game-changing event
+                    if (state.antColony.queen.length === 0) {
+                        addLog("ALERT: Your colony has no queen! You must buy a new one soon or the colony will decline.");
+                        showNotification("ALERT: Your colony has no queen!", "error");
+                    }
+                }
+            }
+            
+            // Process all ant types with the same pattern
+            const processAntType = (antArray, typeLabel) => {
+                for (let i = antArray.length - 1; i >= 0; i--) {
+                    const ant = antArray[i];
+                    const age = state.day - ant.birthDay;
+                    
+                    if (age >= ant.maxAge) {
+                        antArray.splice(i, 1);
+                        // Don't log every ant death to avoid spam
+                        if (Math.random() < 0.3) {
+                            addLog(`A ${typeLabel} ant has died of old age.`);
+                        }
+                        state.stats.naturalDeaths++;
+                    }
+                }
+            };
+            
+            // Process all ant types
+            processAntType(state.antColony.workers, 'worker');
+            processAntType(state.antColony.foragers, 'forager');
+            processAntType(state.antColony.soldiers, 'soldier');
+            processAntType(state.antColony.nurses, 'nurse');
+            processAntType(state.antColony.excavators, 'excavator');
+            
+            // Update max population if needed
+            const totalPopulation = state.antColony.queen.length +
+                                  state.antColony.workers.length +
+                                  state.antColony.soldiers.length +
+                                  state.antColony.foragers.length +
+                                  state.antColony.nurses.length +
+                                  state.antColony.excavators.length;
+            
+            if (totalPopulation > state.stats.maxPopulation) {
+                state.stats.maxPopulation = totalPopulation;
+            }
+        }
+
+        function boostChamberBuilding() {
+            // Excavators boost building process when they're active
+            if (state.antColony.excavators.length === 0) return;
+            
+            let buildingChamber = null;
+            
+            // Find the first chamber that is currently being built
+            for (const chamberName in state.chambers) {
+                const chamber = state.chambers[chamberName];
+                if (chamber.building && chamber.progress < 100) {
+                    buildingChamber = chamber;
+                    break;
+                }
+            }
+            
+            if (buildingChamber) {
+                // Each excavator provides a bonus to building speed
+                const excavatorBonus = settings.excavatorBuildBoost * state.antColony.excavators.length;
+                
+                // Apply the bonus
+                buildingChamber.progress = Math.min(100, buildingChamber.progress + excavatorBonus * 10);
+                
+                // Check if building is complete
+                if (buildingChamber.progress >= 100) {
+                    buildingChamber.building = false;
+                    buildingChamber.built = true;
+                    buildingChamber.progress = 100;
+                }
+            }
+        }
+
+        function processChamberBuilding(deltaTime) {
+            // Process building progress for all chambers
+            for (const chamberName in state.chambers) {
+                const chamber = state.chambers[chamberName];
+                
+                if (chamber.building && chamber.progress < 100) {
+                    // Calculate build progress rate, including excavator bonus and prestige bonus
+                    const excavatorBonus = 1 + (settings.excavatorBuildBoost * state.antColony.excavators.length);
+                    const prestigeBonus = 1 + (state.prestige.buildingBonus / 100);
+                    const progressRate = settings.chamberBuildRate * excavatorBonus * prestigeBonus * deltaTime;
+                    
+                    chamber.progress = Math.min(100, chamber.progress + progressRate);
+                    
+                    // Check if building is complete
+                    if (chamber.progress >= 100) {
+                        chamber.building = false;
+                        chamber.built = true;
+                        chamber.progress = 100;
+                        
+                        // If this was a new chamber, increase level to 1
+                        if (chamber.level === 0) {
+                            chamber.level = 1;
+                        } else {
+                            // This was an upgrade
+                            chamber.level++;
+                            // Increase next upgrade cost
+                            chamber.upgradeCost = Math.floor(chamber.upgradeCost * settings.chamberCostMultiplier);
+                        }
+                        
+                        const chamberDisplayName = chamberName.charAt(0).toUpperCase() + chamberName.slice(1);
+                        addLog(`${chamberDisplayName} chamber is now level ${chamber.level}!`);
+                        
+                        // Show notification
+                        showNotification(`${chamberDisplayName} chamber is now level ${chamber.level}!`, 'success');
+                        
+                        // Apply chamber effects
+                        applyChamberEffects();
+                    }
+                }
+            }
+        }
+
+        function applyChamberEffects() {
+            // Apply effects from all chambers
+            
+            // Food Storage effects
+            if (state.chambers.foodStorage.built) {
+                // Increase food storage capacity
+                const baseStorage = 100 * Math.pow(settings.nestStorageMultiplier, state.upgrades.nestLevel - 1);
+                const storageBonus = state.chambers.foodStorage.level * 0.2; // 20% increase per level
+                state.upgrades.foodStorage = Math.floor(baseStorage * (1 + storageBonus));
+            }
+            
+            // Update chamber displays
+            updateChamberDisplay();
+        }
+
+        function updateStatistics() {
+            // Calculate some statistics
+            
+            // Calculate birth rate (ants born per day over last 10 days)
+            const birthRate = state.stats.antsBorn / Math.max(10, state.day);
+            state.stats.birthRate = birthRate;
+            
+            // Update statistics display
+            updateStatisticsDisplay();
+            
+            // Add data points for charts
+            addDataPoint();
+        }
+
+        function addDataPoint() {
+            // Collect current population data
+            const populationData = {
+                day: state.day,
+                queen: state.antColony.queen.length,
+                workers: state.antColony.workers.length,
+                soldiers: state.antColony.soldiers.length,
+                foragers: state.antColony.foragers.length,
+                nurses: state.antColony.nurses.length,
+                excavators: state.antColony.excavators.length,
+                total: state.antColony.queen.length + 
+                       state.antColony.workers.length + 
+                       state.antColony.soldiers.length + 
+                       state.antColony.foragers.length +
+                       state.antColony.nurses.length +
+                       state.antColony.excavators.length
+            };
+            
+            // Collect resource data
+            const resourceData = {
+                day: state.day,
+                food: state.food,
+                cleanliness: state.cleanliness,
+                coins: state.coins
+            };
+            
+            // Store data for charts, keep only recent history
+            state.stats.populationHistory.push(populationData);
+            state.stats.resourceHistory.push(resourceData);
+            
+            // Keep history at a reasonable size
+            if (state.stats.populationHistory.length > 30) {
+                state.stats.populationHistory.shift();
+            }
+            if (state.stats.resourceHistory.length > 30) {
+                state.stats.resourceHistory.shift();
+            }
+            
+            // Update charts if they exist
+            updateCharts();
+        }
+
+        function initializeCharts() {
+            // Create population chart
+            const popCtx = document.getElementById('population-chart').getContext('2d');
+            populationChart = new Chart(popCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Total',
+                            data: [],
+                            borderColor: '#5D5CDE',
+                            backgroundColor: 'rgba(93, 92, 222, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Workers',
+                            data: [],
+                            borderColor: '#8B4513',
+                            backgroundColor: 'rgba(139, 69, 19, 0.1)',
+                            tension: 0.4,
+                            borderDash: [5, 5]
+                        },
+                        {
+                            label: 'Specialized',
+                            data: [],
+                            borderColor: '#2E8B57',
+                            backgroundColor: 'rgba(46, 139, 87, 0.1)',
+                            tension: 0.4,
+                            borderDash: [3, 3]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 6
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Create resource chart
+            const resCtx = document.getElementById('resource-chart').getContext('2d');
+            resourceChart = new Chart(resCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Food',
+                            data: [],
+                            borderColor: '#10B981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Cleanliness',
+                            data: [],
+                            borderColor: '#3B82F6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Coins',
+                            data: [],
+                            borderColor: '#F59E0B',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            tension: 0.4,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 6
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Food & Clean'
+                            }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            title: {
+                                display: true,
+                                text: 'Coins'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if (!populationChart || !resourceChart) return;
+            
+            // Update population chart
+            const popLabels = state.stats.populationHistory.map(data => `Day ${data.day}`);
+            const totalPop = state.stats.populationHistory.map(data => data.total);
+            const workerPop = state.stats.populationHistory.map(data => data.workers);
+            const specializedPop = state.stats.populationHistory.map(data => 
+                data.soldiers + data.foragers + data.nurses + data.excavators
+            );
+            
+            populationChart.data.labels = popLabels;
+            populationChart.data.datasets[0].data = totalPop;
+            populationChart.data.datasets[1].data = workerPop;
+            populationChart.data.datasets[2].data = specializedPop;
+            populationChart.update();
+            
+            // Update resource chart
+            const resLabels = state.stats.resourceHistory.map(data => `Day ${data.day}`);
+            const foodData = state.stats.resourceHistory.map(data => data.food);
+            const cleanData = state.stats.resourceHistory.map(data => data.cleanliness);
+            const coinData = state.stats.resourceHistory.map(data => data.coins);
+            
+            resourceChart.data.labels = resLabels;
+            resourceChart.data.datasets[0].data = foodData;
+            resourceChart.data.datasets[1].data = cleanData;
+            resourceChart.data.datasets[2].data = coinData;
+            resourceChart.update();
+        }
+
+        // Game actions
+        function feedAnts() {
+            if (state.coins >= 10) {
+                state.coins -= 10;
+                state.food = Math.min(state.upgrades.foodStorage, state.food + 30);
+                addLog('You fed the ants! Food +30');
+                showNotification('You fed the ants! Food +30', 'success');
+                updateStats();
+            } else {
+                addLog('Not enough coins to feed the ants!');
+                showNotification('Not enough coins to feed the ants!', 'error');
+            }
+        }
+
+        function cleanAquarium() {
+            if (state.coins >= 15) {
+                state.coins -= 15;
+                state.cleanliness = Math.min(100, state.cleanliness + 40);
+                addLog('You cleaned the aquarium! Cleanliness +40');
+                showNotification('You cleaned the aquarium! Cleanliness +40', 'success');
+                updateStats();
+            } else {
+                addLog('Not enough coins to clean the aquarium!');
+                showNotification('Not enough coins to clean the aquarium!', 'error');
+            }
+        }
+
+        function buyWorker() {
+            if (state.coins >= 25) {
+                state.coins -= 25;
+                state.antColony.workers.push({
+                    birthDay: state.day,
+                    maxAge: settings.baseWorkerLifespan + 
+                           ((state.upgrades.environmentLevel - 1) * settings.environmentBonus) + 
+                           state.prestige.lifespanBonus
+                });
+                state.stats.antsBorn++;
+                addLog('You bought a new worker ant!');
+                showNotification('You bought a new worker ant!', 'success');
+                updateStats();
+            } else {
+                addLog('Not enough coins to buy a worker ant!');
+                showNotification('Not enough coins to buy a worker ant!', 'error');
+            }
+        }
+
+        function buyQueen() {
+            if (state.coins >= 100) {
+                state.coins -= 100;
+                state.antColony.queen.push({
+                    birthDay: state.day,
+                    maxAge: settings.baseQueenLifespan + 
+                           ((state.upgrades.environmentLevel - 1) * settings.environmentBonus) + 
+                           state.prestige.lifespanBonus +
+                           (state.chambers.royal.level * settings.royalQueenLifeBonus)
+                });
+                state.stats.antsBorn++;
+                state.stats.queensBorn++;
+                addLog('You purchased a new queen ant!');
+                showNotification('You purchased a new queen ant!', 'success');
+                updateStats();
+            } else {
+                addLog('Not enough coins to buy a queen ant!');
+                showNotification('Not enough coins to buy a queen ant!', 'error');
+            }
+        }
+
+        function useRoyalJelly() {
+            if (state.coins >= 45 && state.antColony.queen.length > 0) {
+                state.coins -= 45;
+                // Extend the queen's life
+                for (let queen of state.antColony.queen) {
+                    queen.maxAge += 10;
+                }
+                addLog("You fed royal jelly to the queen, extending her lifespan by 10 days!");
+                showNotification("Queen's lifespan extended by 10 days!", 'success');
+                updateStats();
+            } else if (state.antColony.queen.length === 0) {
+                addLog("You need a queen to use royal jelly!");
+                showNotification("You need a queen to use royal jelly!", 'warning');
+            } else {
+                addLog("Not enough coins to purchase royal jelly!");
+                showNotification("Not enough coins to purchase royal jelly!", 'error');
+            }
+        }
+
+        function improveEnvironment() {
+            if (state.coins >= 40) {
+                state.coins -= 40;
+                state.upgrades.environmentLevel += 1;
+                
+                // Extend all current ants' lifespans
+                for (const antType in state.antColony) {
+                    for (let ant of state.antColony[antType]) {
+                        ant.maxAge += settings.environmentBonus;
+                    }
+                }
+                
+                addLog(`You improved the environment! All ants' lifespans extended by ${settings.environmentBonus} days.`);
+                showNotification(`Environment improved! All ants live longer.`, 'success');
+                updateStats();
+            } else {
+                addLog("Not enough coins to improve the environment!");
+                showNotification("Not enough coins to improve the environment!", 'error');
+            }
+        }
+
+        function upgradeNest() {
+            if (state.coins >= state.upgrades.nestCost) {
+                state.coins -= state.upgrades.nestCost;
+                state.upgrades.nestLevel += 1;
+                
+                // Scale storage with level - progressively better bonuses
+                const newStorage = Math.floor(state.upgrades.foodStorage * settings.nestStorageMultiplier);
+                const storageIncrease = newStorage - state.upgrades.foodStorage;
+                state.upgrades.foodStorage = newStorage;
+                
+                // Increase next upgrade cost
+                state.upgrades.nestCost = Math.floor(state.upgrades.nestCost * settings.nestCostMultiplier);
+                
+                // Bonus: improve efficiency 
+                if (state.upgrades.nestLevel % 3 === 0) {
+                    state.upgrades.efficiency += 0.1;
+                    addLog(`Nest efficiency increased to ${state.upgrades.efficiency.toFixed(1)}x!`);
+                }
+                
+                addLog(`You upgraded the nest to level ${state.upgrades.nestLevel}! Food storage +${storageIncrease}`);
+                showNotification(`Nest upgraded to level ${state.upgrades.nestLevel}!`, 'success');
+                updateStats();
+            } else {
+                addLog('Not enough coins to upgrade the nest!');
+                showNotification('Not enough coins to upgrade the nest!', 'error');
+            }
+        }
+
+        function trainAnt(fromType, toType, cost, baseLifespan, label) {
+            if (state.coins >= cost && state.antColony[fromType].length > 0) {
+                state.coins -= cost;
+                // Remove a random ant of fromType
+                const randomIndex = Math.floor(Math.random() * state.antColony[fromType].length);
+                const ant = state.antColony[fromType].splice(randomIndex, 1)[0];
+                
+                // Convert to new type but adjust lifespan based on the new role
+                state.antColony[toType].push({
+                    birthDay: ant.birthDay,
+                    maxAge: baseLifespan + 
+                           ((state.upgrades.environmentLevel - 1) * settings.environmentBonus) + 
+                           state.prestige.lifespanBonus
+                });
+                
+                addLog(`You trained a ${fromType.slice(0, -1)} into a ${label} ant!`);
+                showNotification(`Worker trained into a ${label} ant!`, 'success');
+                updateStats();
+            } else if (state.antColony[fromType].length === 0) {
+                addLog(`You need at least one ${fromType.slice(0, -1)} ant to train!`);
+                showNotification(`You need at least one ${fromType.slice(0, -1)} ant to train!`, 'warning');
+            } else {
+                addLog(`Not enough coins to train a ${label}!`);
+                showNotification(`Not enough coins to train a ${label}!`, 'error');
+            }
+        }
+
+        function trainForager() {
+            trainAnt('workers', 'foragers', 30, settings.baseForagerLifespan, 'forager');
+        }
+
+        function trainSoldier() {
+            trainAnt('workers', 'soldiers', 35, settings.baseSoldierLifespan, 'soldier');
+        }
+
+        function trainNurse() {
+            trainAnt('workers', 'nurses', 40, settings.baseNurseLifespan, 'nurse');
+        }
+
+        function trainExcavator() {
+            trainAnt('workers', 'excavators', 45, settings.baseExcavatorLifespan, 'excavator');
+        }
+
+        function buildChamber(chamberName) {
+            const chamber = state.chambers[chamberName];
+            
+            if (state.coins >= chamber.upgradeCost) {
+                if (chamber.built) {
+                    // This is an upgrade
+                    state.coins -= chamber.upgradeCost;
+                    chamber.building = true;
+                    chamber.progress = 0;
+                    addLog(`Upgrading ${chamberName} chamber to level ${chamber.level + 1}...`);
+                    showNotification(`Upgrading ${chamberName} chamber...`, 'info');
+                } else {
+                    // This is a new build
+                    state.coins -= chamber.upgradeCost;
+                    chamber.building = true;
+                    chamber.progress = 0;
+                    addLog(`Building new ${chamberName} chamber...`);
+                    showNotification(`Building new ${chamberName} chamber...`, 'info');
+                }
+                updateChamberDisplay();
+            } else {
+                addLog(`Not enough coins to ${chamber.built ? 'upgrade' : 'build'} the ${chamberName} chamber!`);
+                showNotification(`Not enough coins for ${chamberName} chamber!`, 'error');
+            }
+        }
+
+        function buildFoodStorage() {
+            buildChamber('foodStorage');
+        }
+
+        function buildNursery() {
+            buildChamber('nursery');
+        }
+
+        function buildDefense() {
+            buildChamber('defense');
+        }
+
+        function buildRoyal() {
+            buildChamber('royal');
+        }
+
+        function buildTreasure() {
+            buildChamber('treasure');
+        }
+
+        function changeSpeed() {
+            if (state.speed === 1) {
+                state.speed = 2;
+                elements.speedBtn.textContent = 'Speed: Fast';
+                showNotification('Game speed set to Fast', 'info');
+            } else if (state.speed === 2) {
+                state.speed = 0.5;
+                elements.speedBtn.textContent = 'Speed: Slow';
+                showNotification('Game speed set to Slow', 'info');
+            } else {
+                state.speed = 1;
+                elements.speedBtn.textContent = 'Speed: Normal';
+                showNotification('Game speed set to Normal', 'info');
+            }
+        }
+
+        function toggleUpgradePanel() {
+            elements.upgradePanel.classList.toggle('hidden');
+        }
+
+        function toggleAutoFeed() {
+            state.autoFeed = !state.autoFeed;
+            updateStats();
+            addLog(`Auto-feeding is now ${state.autoFeed ? 'enabled' : 'disabled'}.`);
+            showNotification(`Auto-feeding ${state.autoFeed ? 'enabled' : 'disabled'}`, 'info');
+        }
+
+        function calculatePrestigePoints() {
+            // Calculate prestige points based on achievements
+            const maxPopulationPoints = state.stats.maxPopulation * settings.prestigePopulationFactor;
+            const agePoints = state.day * settings.prestigeAgeFactor;
+            
+            // Calculate chamber points
+            let chamberLevels = 0;
+            for (const chamber in state.chambers) {
+                chamberLevels += state.chambers[chamber].level;
+            }
+            const chamberPoints = chamberLevels * settings.prestigeChamberFactor;
+            
+            // Calculate total points
+            return Math.floor(maxPopulationPoints + agePoints + chamberPoints);
+        }
+
+        function performPrestigeReset() {
+            // Calculate new prestige points
+            const newPoints = calculatePrestigePoints();
+            
+            if (newPoints >= settings.prestigeRequirement) {
+                // Store the total prestige points
+                const totalPoints = state.prestige.points + newPoints;
+                
+                // Calculate new prestige bonuses
+                const resourceBonus = Math.floor(totalPoints * 0.5); // 0.5% per point
+                const lifespanBonus = Math.floor(totalPoints * 0.1); // 0.1 day per point
+                const startingBonus = Math.floor(totalPoints * 0.5); // 0.5% per point
+                const buildingBonus = Math.floor(totalPoints * 0.5); // 0.5% per point
+                const queenBonus = Math.floor(totalPoints * 0.5); // 0.5% per point
+                
+                // Save the log history temporarily
+                const oldLogHistory = [...state.logHistory];
+                
+                // Create a fresh state
+                initializeNewColony();
+                
+                // Apply the prestige bonuses
+                state.prestige.points = totalPoints;
+                state.prestige.resourceBonus = resourceBonus;
+                state.prestige.lifespanBonus = lifespanBonus;
+                state.prestige.startingBonus = startingBonus;
+                state.prestige.buildingBonus = buildingBonus;
+                state.prestige.queenBonus = queenBonus;
+                
+                // Apply starting bonuses
+                const startingBoost = 1 + (startingBonus / 100);
+                state.food = Math.floor(50 * startingBoost);
+                state.coins = Math.floor(100 * startingBoost);
+                
+                // Add prestige log message and restore critical logs
+                state.logHistory = [
+                    { day: 1, message: `Colony restarted with ${totalPoints} prestige points!` },
+                    { day: 1, message: 'Previous colony achievements have granted permanent bonuses.' },
+                    { day: 1, message: 'Welcome to your ant aquarium!' },
+                    { day: 1, message: 'Take care of your ants by feeding them and keeping their home clean.' }
+                ];
+                
+                // Show prestige notification
+                showNotification(`Colony reset with ${totalPoints} prestige points!`, 'success');
+                
+                // Update everything
+                rebuildLogDisplay();
+                updateStats();
+                
+                // Save the game after prestige
+                autoSaveGame();
+                
+                addLog(`Gained ${newPoints} prestige points! Total: ${totalPoints}`);
+            } else {
+                addLog(`You need at least ${settings.prestigeRequirement} prestige points to reset.`);
+                showNotification(`You need at least ${settings.prestigeRequirement} prestige points to reset.`, 'warning');
+            }
+        }
+
+        function initializeNewColony() {
+            // Reset all state except prestige points
+            state.antColony = {
+                queen: [{ birthDay: 0, maxAge: 60 }],
+                workers: [
+                    { birthDay: 0, maxAge: 20 },
+                    { birthDay: 0, maxAge: 20 },
+                    { birthDay: 0, maxAge: 20 },
+                    { birthDay: 0, maxAge: 20 }
+                ],
+                soldiers: [],
+                foragers: [],
+                nurses: [],
+                excavators: []
+            };
+            
+            state.food = 50;
+            state.cleanliness = 80;
+            state.coins = 100;
+            state.day = 1;
+            state.speed = 1;
+            state.eggs = 0;
+            state.larvae = 0;
+            state.autoFeed = false;
+            
+            state.chambers = {
+                foodStorage: { level: 1, built: true, building: false, progress: 100, upgradeCost: 75 },
+                nursery: { level: 0, built: false, building: false, progress: 0, upgradeCost: 100 },
+                defense: { level: 0, built: false, building: false, progress: 0, upgradeCost: 90 },
+                royal: { level: 0, built: false, building: false, progress: 0, upgradeCost: 120 },
+                treasure: { level: 0, built: false, building: false, progress: 0, upgradeCost: 150 }
+            };
+            
+            state.upgrades = {
+                nestLevel: 1,
+                foodStorage: 100,
+                efficiency: 1,
+                nestCost: 50,
+                environmentLevel: 1
+            };
+            
+            state.stats = {
+                antsBorn: 0,
+                queensBorn: 0,
+                naturalDeaths: 0,
+                predatorDeaths: 0,
+                starvationDeaths: 0,
+                maxPopulation: 5,
+                longestQueenLife: 0,
+                populationHistory: [],
+                resourceHistory: [],
+                birthRate: 0
+            };
+            
+            state.lastEventDay = 0;
+            state.lastTimestamp = Date.now();
+            state.logHistory = [];
+        }
+
+        // New function for hard reset
+        function hardReset() {
+            // Prompt the user to confirm the reset
+            if (confirm("Are you sure you want to start a completely new game? This will erase ALL progress including prestige points.")) {
+                // Reset everything including prestige points
+                state.prestige = {
+                    points: 0,
+                    resourceBonus: 0,
+                    lifespanBonus: 0,
+                    startingBonus: 0,
+                    buildingBonus: 0,
+                    queenBonus: 0
+                };
+                
+                // Initialize a new colony
+                initializeNewColony();
+                
+                // Set initial logs for a new game
+                state.logHistory = [
+                    { day: 1, message: 'Welcome to your ant aquarium!' },
+                    { day: 1, message: 'Take care of your ants by feeding them and keeping their home clean.' },
+                    { day: 1, message: 'TIP: Build chambers to enhance your colony capabilities!' }
+                ];
+                
+                // Update UI
+                rebuildLogDisplay();
+                updateStats();
+                
+                // Clear local storage
+                localStorage.removeItem('antAquariumAutoSave');
+                localStorage.removeItem('antAquariumQuickSave');
+                localStorage.removeItem('antAquariumLastState');
+                
+                // Show notification
+                showNotification('Started a new game. All progress has been reset!', 'info');
+            }
+        }
+
+        // Tab navigation
+        function switchTab(tabId) {
+            // Hide all tabs
+            elements.tabContents.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tab links
+            elements.tabLinks.forEach(link => {
+                link.classList.remove('active', 'border-primary');
+                link.classList.add('border-transparent');
+            });
+            
+            // Activate selected tab
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+            
+            // Activate selected tab link
+            const activeLink = document.querySelector(`[data-tab="${tabId}"]`);
+            activeLink.classList.add('active', 'border-primary');
+            activeLink.classList.remove('border-transparent');
+            
+            // Initialize charts when switching to statistics tab
+            if (tabId === 'statistics' && (!populationChart || !resourceChart)) {
+                initializeCharts();
+                updateCharts();
+            }
+        }
+
+        // Auto-save functionality
+        function autoSaveGame() {
+            try {
+                const saveData = {
+                    state: JSON.parse(JSON.stringify(state)), // Deep clone to avoid reference issues
+                    timestamp: Date.now()
+                };
+                
+                localStorage.setItem('antAquariumAutoSave', JSON.stringify(saveData));
+                showAutoSaveIndicator();
+            } catch (error) {
+                console.error('Auto-save failed:', error);
+            }
+        }
+        
+        // Quick save functionality (manual save to localStorage)
+        function quickSaveGame() {
+            try {
+                const saveData = {
+                    state: JSON.parse(JSON.stringify(state)), // Deep clone to avoid reference issues
+                    timestamp: Date.now()
+                };
+                
+                localStorage.setItem('antAquariumQuickSave', JSON.stringify(saveData));
+                showNotification('Game saved successfully!', 'success');
+            } catch (error) {
+                console.error('Quick save failed:', error);
+                showNotification('Save failed!', 'error');
+            }
+        }
+        
+        // Load from localStorage
+        function loadLocalSave() {
+            try {
+                // Try to load quick save first, fall back to auto-save
+                let savedData = localStorage.getItem('antAquariumQuickSave');
+                if (!savedData) {
+                    savedData = localStorage.getItem('antAquariumAutoSave');
+                    if (!savedData) {
+                        return false; // No local save found
+                    }
+                }
+                
+                const saveData = JSON.parse(savedData);
+                if (!saveData.state) {
+                    throw new Error('Invalid save data format');
+                }
+                
+                // Calculate offline progress
+                const offlineTime = (Date.now() - saveData.timestamp) / 1000; // in seconds
+                
+                // Restore state
+                Object.assign(state, saveData.state);
+                
+                // Process offline progress if more than 1 minute passed
+                if (offlineTime > 60) {
+                    processOfflineProgress(offlineTime);
+                }
+                
+                // Rebuild the log display
+                rebuildLogDisplay();
+                
+                // Update UI
+                updateStats();
+                
+                return true;
+            } catch (error) {
+                console.error('Error loading save:', error);
+                return false;
+            }
+        }
+
+        // Save/Load Functions
+        function saveGame() {
+            const saveData = {
+                state: { ...state },
+                timestamp: Date.now()
+            };
+            
+            // Convert to Base64 for easier sharing
+            const jsonString = JSON.stringify(saveData);
+            const base64Save = btoa(jsonString);
+            
+            elements.saveLoadContainer.classList.remove('hidden');
+            elements.saveText.value = base64Save;
+            elements.saveText.select();
+            
+            // Also save locally
+            quickSaveGame();
+            
+            addLog('Game saved! Copy the text to save your progress.');
+            showNotification('Game saved! Copy the text to save your progress.', 'success');
+        }
+
+        function loadGame() {
+            elements.saveLoadContainer.classList.remove('hidden');
+            elements.saveText.value = '';
+            elements.saveText.placeholder = 'Paste your save data here and click Import';
+        }
+
+        function importSave() {
+            try {
+                const base64Save = elements.saveText.value.trim();
+                if (!base64Save) {
+                    addLog('No save data provided!');
+                    showNotification('No save data provided!', 'error');
+                    return;
+                }
+                
+                const jsonString = atob(base64Save);
+                const saveData = JSON.parse(jsonString);
+                
+                if (!saveData.state) {
+                    throw new Error('Invalid save data format');
+                }
+                
+                // Calculate offline progress if needed
+                const offlineTime = (Date.now() - saveData.timestamp) / 1000; // in seconds
+                
+                // Restore state
+                Object.assign(state, saveData.state);
+                
+                // Process offline progress if more than 1 minute passed
+                if (offlineTime > 60) {
+                    processOfflineProgress(offlineTime);
+                }
+                
+                // Rebuild the log display
+                rebuildLogDisplay();
+                
+                // Update UI
+                updateStats();
+                elements.saveLoadContainer.classList.add('hidden');
+                
+                // Update charts if on statistics tab
+                if (document.getElementById('statistics-tab').classList.contains('active')) {
+                    initializeCharts();
+                    updateCharts();
+                }
+                
+                // Save to localStorage as well
+                quickSaveGame();
+                
+                addLog('Save data imported successfully!');
+                showNotification('Save data imported successfully!', 'success');
+            } catch (error) {
+                console.error('Error importing save:', error);
+                addLog('Error importing save data. Make sure it\'s valid!');
+                showNotification('Error importing save data!', 'error');
+            }
+        }
+
+        function processOfflineProgress(seconds) {
+            // Calculate days passed
+            const daysPassed = Math.floor(seconds / 60);
+            if (daysPassed > 0) {
+                state.day += daysPassed;
+                
+                // Process ant lifecycle for passed days (simplified)
+                for (let i = 0; i < daysPassed; i++) {
+                    processAntLifecycle();
+                }
+            }
+            
+            // Calculate resources generated during offline time
+            
+            // Coins generated (scaled by time)
+            const baseCoinRate = settings.coinGenerationRate;
+            const treasureCoinBonus = state.chambers.treasure.built ? 
+                                     (state.chambers.treasure.level * settings.treasureCoinBonus) : 0;
+            const totalCoinRate = baseCoinRate + treasureCoinBonus;
+            
+            const coinsGenerated = Math.floor((seconds / 30) * totalCoinRate);
+            state.coins += coinsGenerated;
+            
+            // Food generation from foragers (minus consumption)
+            const totalAnts = getTotalAntCount();
+                             
+            const foragerBonus = 1 + (state.prestige.resourceBonus / 100);
+            const foodGenerated = state.antColony.foragers.length * settings.passiveFoodGeneration * seconds * foragerBonus;
+            const foodConsumed = (settings.foodDecayRate + (totalAnts * settings.antFoodConsumption)) * seconds;
+            let foodNet = foodGenerated - foodConsumed;
+            
+            state.food = Math.max(0, Math.min(state.upgrades.foodStorage, state.food + foodNet));
+            
+            // Cleanliness decay
+            const cleaningBonus = state.antColony.workers.length * settings.cleaningEfficiency * seconds;
+            const cleanlinessDegradation = (settings.cleanlinessDecayRate * totalAnts / 5) * seconds;
+            state.cleanliness = Math.max(0, Math.min(100, state.cleanliness - cleanlinessDegradation + cleaningBonus));
+            
+            // Process chamber building
+            for (let i = 0; i < daysPassed; i++) {
+                processChamberBuilding(60); // 60 seconds per day
+            }
+            
+            // Add summary to log
+            addLog(`While you were away for ${formatTime(seconds)}: Generated ${coinsGenerated} coins`);
+            if (foodNet > 0) {
+                addLog(`Food increased by ${Math.floor(foodNet)} units`);
+            } else if (foodNet < 0) {
+                addLog(`Food decreased by ${Math.floor(Math.abs(foodNet))} units`);
+            }
+            
+            // Report on ants that died while away
+            if (daysPassed > 1) {
+                addLog(`${daysPassed} days passed. Some ants have aged while you were gone.`);
+            }
+            
+            // Show notification
+            showNotification(`Welcome back! ${daysPassed} days have passed.`, 'info');
+        }
+
+        function getTotalAntCount() {
+            return state.antColony.queen.length + 
+                  state.antColony.workers.length + 
+                  state.antColony.soldiers.length + 
+                  state.antColony.foragers.length +
+                  state.antColony.nurses.length +
+                  state.antColony.excavators.length;
+        }
+
+        function formatTime(seconds) {
+            if (seconds < 60) return `${Math.floor(seconds)} seconds`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes`;
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            return `${hours} hour${hours > 1 ? 's' : ''}${mins > 0 ? ` ${mins} min` : ''}`;
+        }
+
+        function rebuildLogDisplay() {
+            // Clear existing log entries
+            elements.logContainer.innerHTML = '';
+            
+            // Show the most recent 20 log entries or fewer if not available
+            const recentLogs = state.logHistory.slice(-20);
+            for (let i = recentLogs.length - 1; i >= 0; i--) {
+                const log = recentLogs[i];
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry border-b border-gray-200 dark:border-gray-700 pb-1';
+                logEntry.textContent = `Day ${log.day}: ${log.message}`;
+                elements.logContainer.appendChild(logEntry);
+            }
+        }
+
+        // Game loop
+        let lastTimestamp = 0;
+        let antActivityTimer = 0;
+        let coinGenerationTimer = 0;
+        let dayTimer = 0;
+        let eggLayingTimer = 0;
+        let eventCheckTimer = 0;
+        let lifecycleTimer = 0;
+        let statisticsTimer = 0;
+
+        function gameLoop(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const deltaTime = (timestamp - lastTimestamp) / 1000 * state.speed; // convert to seconds
+            lastTimestamp = timestamp;
+            
+            // Update day counter
+            dayTimer += deltaTime;
+            if (dayTimer >= 60) { // 1 minute = 1 day
+                dayTimer = 0;
+                state.day++;
+                
+                // Update day counter in UI
+                elements.dayCounter.textContent = `Day ${state.day}`;
+                
+                // Process ant lifecycle once per day
+                processAntLifecycle();
+            }
+            
+            // Update last timestamp for offline calculation
+            state.lastTimestamp = Date.now();
+            
+            // Get total ants
+            const totalAnts = getTotalAntCount();
+            
+            // No queen warning every 5 days
+            if (state.antColony.queen.length === 0 && state.day % 5 === 0) {
+                addLog("REMINDER: Your colony has no queen! Purchase a new one to ensure survival!");
+                // Add a buy queen button if needed
+                if (!document.getElementById('buy-queen-btn')) {
+                    const buyQueenBtn = document.createElement('button');
+                    buyQueenBtn.id = 'buy-queen-btn';
+                    buyQueenBtn.className = 'bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded transition mt-2 w-full';
+                    buyQueenBtn.textContent = 'Emergency: Buy Queen (100 🪙)';
+                    buyQueenBtn.addEventListener('click', buyQueen);
+                    elements.upgradePanel.appendChild(buyQueenBtn);
+                }
+            }
+            
+            // Food generation from foragers with prestige bonus
+            const foragerBonus = 1 + (state.prestige.resourceBonus / 100);
+            const foragersFood = state.antColony.foragers.length * settings.passiveFoodGeneration * deltaTime * foragerBonus;
+            state.food = Math.min(state.upgrades.foodStorage, state.food + foragersFood);
+            
+            // Food decay, reduced by food storage chamber
+            const foodStorageReduction = 1 - (state.chambers.foodStorage.level * settings.foodStorageDecayReduction);
+            state.food = Math.max(0, state.food - (settings.foodDecayRate * foodStorageReduction + (totalAnts * settings.antFoodConsumption)) * deltaTime);
+            
+            // Check if auto-feed should trigger
+            if (state.autoFeed && state.food <= settings.autoFeedThreshold && state.coins >= 10) {
+                feedAnts();
+            }
+            
+            // Cleanliness decay - based on total ants but reduced by workers helping to clean
+            const cleaningBonus = state.antColony.workers.length * settings.cleaningEfficiency * deltaTime;
+            state.cleanliness = Math.max(0, state.cleanliness - 
+                ((settings.cleanlinessDecayRate * totalAnts / 5) * deltaTime) + cleaningBonus);
+            
+            // Generate coins over time, including treasure chamber bonus
+            coinGenerationTimer += deltaTime;
+            if (coinGenerationTimer >= 30) { // 30 seconds
+                coinGenerationTimer = 0;
+                
+                // Calculate base coin generation and treasure chamber bonus
+                const baseCoinRate = settings.coinGenerationRate;
+                const treasureCoinBonus = state.chambers.treasure.built ? 
+                                        (state.chambers.treasure.level * settings.treasureCoinBonus) : 0;
+                const totalCoinRate = baseCoinRate + treasureCoinBonus;
+                
+                state.coins += totalCoinRate;
+                
+                // Log message with treasure chamber contribution if applicable
+                if (treasureCoinBonus > 0) {
+                    addLog(`Generated ${totalCoinRate} coins (includes ${treasureCoinBonus} from Treasure Chamber).`);
+                } else {
+                    addLog(`Generated ${totalCoinRate} coin${totalCoinRate > 1 ? 's' : ''} from colony activity.`);
+                }
+                
+                // Bonus coin from foragers occasionally
+                if (state.antColony.foragers.length > 0 && Math.random() < 0.3) {
+                    const bonusCoins = Math.ceil(state.antColony.foragers.length / 2);
+                    state.coins += bonusCoins;
+                    addLog(`Foragers found ${bonusCoins} additional coin${bonusCoins > 1 ? 's' : ''}!`);
+                }
+            }
+            
+            // Random ant activities
+            antActivityTimer += deltaTime;
+            if (antActivityTimer >= 3) { // Every 3 seconds
+                antActivityTimer = 0;
+                addAntActivity();
+            }
+            
+            // Random events check
+            eventCheckTimer += deltaTime;
+            if (eventCheckTimer >= 15) { // Check every 15 seconds
+                eventCheckTimer = 0;
+                triggerRandomEvent();
+            }
+            
+            // Process chamber building
+            processChamberBuilding(deltaTime);
+            
+            // Update statistics periodically
+            statisticsTimer += deltaTime;
+            if (statisticsTimer >= settings.statisticsInterval) {
+                statisticsTimer = 0;
+                updateStatistics();
+            }
+            
+            // Auto-save timer
+            autoSaveTimer += deltaTime;
+            if (autoSaveTimer >= settings.autoSaveInterval) {
+                autoSaveTimer = 0;
+                autoSaveGame();
+            }
+            
+            // Queen laying eggs
+            if (state.antColony.queen.length > 0 && state.food > 20 && state.cleanliness > 30) {
+                eggLayingTimer += deltaTime;
+                if (eggLayingTimer >= 1) { // Check every second
+                    eggLayingTimer = 0;
+                    
+                    // Calculate egg chance with all bonuses
+                    let baseEggChance = settings.queenEggChance;
+                    
+                    // Apply chamber bonuses
+                    if (state.chambers.nursery.built) {
+                        baseEggChance *= (1 + (state.chambers.nursery.level * settings.nurseryEggBoost));
+                    }
+                    
+                    // Apply royal chamber bonus
+                    if (state.chambers.royal.built) {
+                        baseEggChance *= (1 + (state.chambers.royal.level * settings.royalEggRateBonus));
+                    }
+                    
+                    // Apply prestige queen bonus
+                    baseEggChance *= (1 + (state.prestige.queenBonus / 100));
+                    
+                    // Apply nest efficiency
+                    baseEggChance *= state.upgrades.efficiency;
+                    
+                    // Queen has a chance to lay an egg
+                    if (Math.random() < baseEggChance) {
+                        state.eggs++;
+                        addLog('The queen has laid an egg!');
+                        
+                        // Schedule egg hatching - calculate development time
+                        let eggTime = settings.eggHatchTime;
+                        let larvaTime = settings.larvaPupaTime;
+                        
+                        // Nurses reduce development time
+                        const nurseBonus = state.antColony.nurses.length * settings.nurseEggBoost;
+                        eggTime *= (1 - nurseBonus);
+                        larvaTime *= (1 - nurseBonus);
+                        
+                        // Nursery chamber reduces development time
+                        if (state.chambers.nursery.built) {
+                            const nurseryBonus = state.chambers.nursery.level * settings.nurseryGrowthSpeed;
+                            eggTime *= (1 - nurseryBonus);
+                            larvaTime *= (1 - nurseryBonus);
+                        }
+                        
+                        // Set minimum times
+                        eggTime = Math.max(eggTime, 10);
+                        larvaTime = Math.max(larvaTime, 20);
+                        
+                        setTimeout(() => {
+                            if (state.food > 10) { // Eggs need food to hatch
+                                state.eggs--;
+                                state.larvae++;
+                                addLog('An egg has hatched into a larva!');
+                                
+                                // Schedule larva developing into a worker
+                                setTimeout(() => {
+                                    if (state.food > 15) { // Larvae need more food to develop
+                                        state.larvae--;
+                                        // Add a new worker ant with current day as birthDay
+                                        state.antColony.workers.push({
+                                            birthDay: state.day,
+                                            maxAge: settings.baseWorkerLifespan + 
+                                                   ((state.upgrades.environmentLevel - 1) * settings.environmentBonus) + 
+                                                   state.prestige.lifespanBonus
+                                        });
+                                        state.stats.antsBorn++;
+                                        addLog('A larva has developed into a worker ant!');
+                                    } else {
+                                        state.larvae--;
+                                        addLog('A larva died due to insufficient food!');
+                                    }
+                                }, larvaTime * 1000 / state.speed);
+                            } else {
+                                state.eggs--;
+                                addLog('An egg failed to hatch due to insufficient food!');
+                            }
+                        }, eggTime * 1000 / state.speed);
+                    }
+                }
+            }
+            
+            // Die-off if food is depleted for too long
+            if (state.food <= 0 && Math.random() < 0.05 * deltaTime && totalAnts > 1) {
+                // Random ant types to target for starvation
+                const antTypes = [
+                    { name: 'workers', label: 'worker' },
+                    { name: 'foragers', label: 'forager' },
+                    { name: 'soldiers', label: 'soldier' },
+                    { name: 'nurses', label: 'nurse' },
+                    { name: 'excavators', label: 'excavator' }
+                ];
+                
+                // Filter to only types with ants
+                const availableTypes = antTypes.filter(type => state.antColony[type.name].length > 0);
+                
+                if (availableTypes.length > 0) {
+                    // Pick a random type
+                    const randomType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+                    
+                    // Remove a random ant of that type
+                    const randomIndex = Math.floor(Math.random() * state.antColony[randomType.name].length);
+                    state.antColony[randomType.name].splice(randomIndex, 1);
+                    
+                    addLog(`A ${randomType.label} ant has died from starvation!`);
+                    state.stats.starvationDeaths++;
+                    
+                    // Show notification for starvation
+                    if (Math.random() < 0.3) { // Don't show for every death
+                        showNotification(`A ${randomType.label} ant died from starvation!`, 'warning');
+                    }
+                }
+            }
+            
+            // Update UI
+            updateStats();
+            
+            // Continue the game loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event listeners
+        elements.feedBtn.addEventListener('click', feedAnts);
+        elements.cleanBtn.addEventListener('click', cleanAquarium);
+        elements.buyWorkerBtn.addEventListener('click', buyWorker);
+        elements.speedBtn.addEventListener('click', changeSpeed);
+        elements.upgradeBtn.addEventListener('click', toggleUpgradePanel);
+        elements.upgradeNestBtn.addEventListener('click', upgradeNest);
+        elements.trainForagerBtn.addEventListener('click', trainForager);
+        elements.trainSoldierBtn.addEventListener('click', trainSoldier);
+        elements.trainNurseBtn.addEventListener('click', trainNurse);
+        elements.trainExcavatorBtn.addEventListener('click', trainExcavator);
+        elements.royalJellyBtn.addEventListener('click', useRoyalJelly);
+        elements.environmentBtn.addEventListener('click', improveEnvironment);
+        elements.autoFeedToggle.addEventListener('change', toggleAutoFeed);
+        
+        // Chamber buttons
+        elements.buildFoodStorageBtn.addEventListener('click', buildFoodStorage);
+        elements.buildNurseryBtn.addEventListener('click', buildNursery);
+        elements.buildDefenseBtn.addEventListener('click', buildDefense);
+        elements.buildRoyalBtn.addEventListener('click', buildRoyal);
+        elements.buildTreasureBtn.addEventListener('click', buildTreasure);
+        
+        // Prestige button
+        elements.prestigeResetBtn.addEventListener('click', performPrestigeReset);
+        
+        // Tab navigation
+        elements.tabLinks.forEach(tabLink => {
+            tabLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tabId = tabLink.getAttribute('data-tab');
+                switchTab(tabId);
+            });
+        });
+        
+        // Save/Load event listeners
+        elements.saveBtn.addEventListener('click', saveGame);
+        elements.loadBtn.addEventListener('click', loadGame);
+        elements.quickSaveBtn.addEventListener('click', quickSaveGame);
+        elements.resetBtn.addEventListener('click', hardReset);
+        elements.saveText.addEventListener('click', function() {
+            this.select();
+        });
+        elements.closeSaveLoadBtn.addEventListener('click', function() {
+            elements.saveLoadContainer.classList.add('hidden');
+        });
+        elements.saveText.addEventListener('change', function() {
+            if (elements.saveText.placeholder.includes('Paste your save')) {
+                // We're in import mode
+                importSave();
+            }
+        });
+
+        // Before page unload - save timestamp
+        window.addEventListener('beforeunload', function() {
+            state.lastTimestamp = Date.now();
+            localStorage.setItem('antAquariumLastState', JSON.stringify({
+                lastTimestamp: state.lastTimestamp
+            }));
+        });
+
+        // Initialize the game
+        function initGame() {
+            // First try to load from localStorage
+            const loadedFromLocal = loadLocalSave();
+            
+            if (loadedFromLocal) {
+                showNotification('Game loaded from previous save!', 'success');
+            } else {
+                // Check for returning after closing
+                try {
+                    const savedStateStr = localStorage.getItem('antAquariumLastState');
+                    if (savedStateStr) {
+                        const savedState = JSON.parse(savedStateStr);
+                        if (savedState.lastTimestamp) {
+                            const offlineTime = (Date.now() - savedState.lastTimestamp) / 1000;
+                            if (offlineTime > 60) { // Only process if more than a minute has passed
+                                processOfflineProgress(offlineTime);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error checking for offline progress:', e);
+                }
+            }
+
+            // Set initial day if it's a new game
+            if (state.day <= 1) {
+                state.day = 1;
+                elements.dayCounter.textContent = `Day ${state.day}`;
+                elements.statColonyAge.textContent = state.day;
+                
+                addLog('Welcome to your ant aquarium!');
+                addLog('Take care of your ants by feeding them and keeping their home clean.');
+                addLog('TIP: Build chambers to enhance your colony capabilities!');
+                showNotification('Welcome to Ant Aquarium!', 'info');
+            }
+            
+            updateStats();
+            requestAnimationFrame(gameLoop);
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
