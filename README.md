@@ -2,7 +2,7 @@
 
 **Ant Aquarium** is a virtual ant colony management game where you take care of your ants, build chambers, and grow your colony. Manage resources like food, cleanliness, and coins to ensure your ants thrive. Train specialized ants, upgrade your nest, and unlock prestige bonuses to build the ultimate ant empire!
 
-Play the game here: https://cygryu.github.io/AntAquarium/
+**[Play the game here](https://cygryu.github.io/AntAquarium/)**
 
 ---
 
@@ -70,6 +70,17 @@ To run Ant Aquarium locally, follow these steps:
 
 ### Prestige
 - Reset your colony to earn **prestige points**, which provide permanent bonuses like increased resource generation, longer ant lifespans, and faster chamber building.
+
+---
+
+## Support the Developer ☕
+
+If you enjoy playing **Ant Aquarium** and would like to support the development of the game, consider buying me a coffee! Your support helps keep the project alive and allows me to add more features and improvements.
+
+- **[Ko-Fi](https://ko-fi.com/cygryu)**: Support me with a one-time donation.
+- **[PayPal](https://www.paypal.com/paypalme/sofiansu?country.x=ID&locale.x=en_US)**: Send a donation via PayPal.
+
+Thank you for your support! 💖
 
 ---
 
