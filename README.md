@@ -6,16 +6,6 @@ Play the game here: https://cygryu.github.io/AntAquarium/
 
 ---
 
-## Table of Contents
-- [Features](#features)
-- [How to Play](#how-to-play)
-- [Installation](#installation)
-- [Game Mechanics](#game-mechanics)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
 ## Features 🎮
 - **Colony Management**: Take care of your ants by feeding them, keeping their home clean, and ensuring their survival.
 - **Resource Management**: Manage food, cleanliness, and coins to grow your colony.
